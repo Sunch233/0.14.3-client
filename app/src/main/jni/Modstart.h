@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cerrno>
+#include <dirent.h>
 
 typedef unsigned long int ADDRESS;
 typedef char PACKAGENAME;

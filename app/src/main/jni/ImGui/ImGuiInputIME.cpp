@@ -14,14 +14,15 @@ namespace ImGuiIME {
     static jmethodID g_hideKeyboard = nullptr;
     static jmethodID g_getInputText = nullptr;
     static jmethodID g_isKeyboardVisible = nullptr;
+    static jmethodID g_copyToClipboard = nullptr;
+    static jmethodID g_pasteFromClipboard = nullptr;
 
     static bool g_initialized = false;
     static ImGuiID g_activeInputID = 0;
     static ImVec2 g_inputBoxPos = ImVec2(0, 0);
     static ImVec2 g_inputBoxSize = ImVec2(0, 0);
-    static double g_longPressStartTime = 0;
-    static bool g_isLongPressTriggered = false;
-    static const float LONG_PRESS_DURATION = 0.8f;
+    static double g_pressStartTime = 0;
+    static bool g_isPointerDown = false;
 
     static JNIEnv* GetEnv() {
         JNIEnv* env = nullptr;
@@ -32,6 +33,29 @@ namespace ImGuiIME {
             }
         }
         return env;
+    }
+
+    static void CopyToClipboard(const std::string& text) {
+        JNIEnv* env = GetEnv();
+        if (env && g_cls && g_copyToClipboard) {
+            jstring jtext = env->NewStringUTF(text.c_str());
+            env->CallStaticVoidMethod(g_cls, g_copyToClipboard, jtext);
+            env->DeleteLocalRef(jtext);
+        }
+    }
+
+    static std::string PasteFromClipboard() {
+        JNIEnv* env = GetEnv();
+        if (env && g_cls && g_pasteFromClipboard) {
+            auto result = (jstring)env->CallStaticObjectMethod(g_cls, g_pasteFromClipboard);
+            if (!result) return "";
+            const char* str = env->GetStringUTFChars(result, nullptr);
+            std::string ret(str ? str : "");
+            env->ReleaseStringUTFChars(result, str);
+            env->DeleteLocalRef(result);
+            return ret;
+        }
+        return "";
     }
 
     static void CallShowKeyboard(const std::string& text) {
@@ -97,7 +121,10 @@ namespace ImGuiIME {
         g_getInputText = env->GetStaticMethodID(g_cls, "getInputText", "()Ljava/lang/String;");
         g_isKeyboardVisible = env->GetStaticMethodID(g_cls, "isKeyboardVisible", "()Z");
 
-        if (!g_showKeyboard || !g_hideKeyboard || !g_getInputText || !g_isKeyboardVisible) {
+        g_copyToClipboard = env->GetStaticMethodID(g_cls, "copyToClipboard", "(Ljava/lang/String;)V");
+        g_pasteFromClipboard = env->GetStaticMethodID(g_cls, "pasteFromClipboard", "()Ljava/lang/String;");
+
+        if (!g_showKeyboard || !g_hideKeyboard || !g_getInputText || !g_isKeyboardVisible || !g_copyToClipboard || !g_pasteFromClipboard) {
             LOGE("Failed to get method IDs");
             return;
         }
@@ -109,6 +136,8 @@ namespace ImGuiIME {
     bool InputText(const char* label, char* buf, int bufSize, float width) {
         ImGuiIO& io = ImGui::GetIO();
         ImGuiID id = ImGui::GetID(label);
+        io.MouseDoubleClickTime = 0.55f;
+        io.MouseDoubleClickMaxDist = 20.0f;
         bool isActive = (g_activeInputID == id);
         bool value_changed = false;
 
@@ -150,46 +179,92 @@ namespace ImGuiIME {
         bool hovered = ImGui::IsItemHovered();
         bool active = ImGui::IsItemActive();
 
-        if (clicked) {
-            //LOGD("点击了输入框, ID=0x%08X, current text='%s'", id, buf);
+        char popupLabel[64];
+        snprintf(popupLabel, sizeof(popupLabel), "##IME_Menu_%u", id);
+
+        ImVec2 clickPos = ImGui::GetIO().MousePos;
+
+        bool isDoubleClicked = hovered && ImGui::IsMouseDoubleClicked(0);
+
+        bool isLongPressed = false;
+        if (active && hovered) {
+            if (ImGui::IsMouseClicked(0)) {
+                g_pressStartTime = ImGui::GetTime();
+                g_isPointerDown = true;
+            }
+            if (g_isPointerDown) {
+                double elapsed = ImGui::GetTime() - g_pressStartTime;
+                if (elapsed >= 0.35f) {
+                    g_isPointerDown = false;
+                    isLongPressed = true;
+                }
+            }
+        } else {
+            g_isPointerDown = false;
+        }
+
+        if (isDoubleClicked || isLongPressed) {
+            LOGD("PopupMenu (DoubleClicked: %d, LongPressed: %d)", isDoubleClicked, isLongPressed);
+            ImGui::OpenPopup(popupLabel);
+        }
+
+        if (clicked && !isDoubleClicked) {
             if (g_activeInputID != 0 && g_activeInputID != id) {
                 CallHideKeyboard();
             }
             g_activeInputID = id;
             g_inputBoxPos = pos;
             g_inputBoxSize = ImVec2(w, h);
-            g_longPressStartTime = ImGui::GetTime();
-            g_isLongPressTriggered = false;
+
             CallShowKeyboard(std::string(buf));
         }
 
-        if (active && hovered && !g_isLongPressTriggered) {
-            double elapsed = ImGui::GetTime() - g_longPressStartTime;
-            if (elapsed > LONG_PRESS_DURATION) {
-                g_isLongPressTriggered = true;
-                //LOGD("popup显示在(%.0f, %.0f)", pos.x + w / 2, pos.y + h / 2);
+        ImGui::SetNextWindowPos(ImVec2(clickPos.x - 50, clickPos.y - 100), ImGuiCond_Appearing);
 
-                JNIEnv* env = GetEnv();
-                if (env && g_cls) {
-                    jmethodID showPopupMethod = env->GetStaticMethodID(g_cls, "showPopupMenu", "(FF)V");
-                    if (showPopupMethod) {
-                        env->CallStaticVoidMethod(g_cls, showPopupMethod, pos.x + w / 2, pos.y + h / 2);
-                    }
-                }
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10, 10));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10, 0));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
+
+        if (ImGui::BeginPopup(popupLabel)) {
+            ImVec2 btnSize(100.0f, 75.0f);
+
+            if (ImGui::Button("复制", btnSize)) {
+                CopyToClipboard(std::string(buf));
+                ImGui::CloseCurrentPopup();
             }
-        }
+            ImGui::SameLine();
 
-        if (!active || !hovered) {
-            g_isLongPressTriggered = false;
+            if (ImGui::Button("剪切", btnSize)) {
+                CopyToClipboard(std::string(buf));
+                buf[0] = '\0';
+                CallShowKeyboard("");
+                value_changed = true;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+
+            if (ImGui::Button("粘贴", btnSize)) {
+                std::string pasteText = PasteFromClipboard();
+                if (!pasteText.empty()) {
+                    strncat(buf, pasteText.c_str(), bufSize - strlen(buf) - 1);
+                    CallShowKeyboard(std::string(buf));
+                    value_changed = true;
+                }
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::EndPopup();
         }
+        ImGui::PopStyleVar(3);
 
         if (g_activeInputID == id) {
-            std::string imeText = CallGetText();
-
-            if (imeText != buf) {
-                strncpy(buf, imeText.c_str(), bufSize - 1);
-                buf[bufSize - 1] = '\0';
-                value_changed = true;
+            if (!clicked) {
+                std::string imeText = CallGetText();
+                if (imeText != buf) {
+                    strncpy(buf, imeText.c_str(), bufSize - 1);
+                    buf[bufSize - 1] = '\0';
+                    value_changed = true;
+                }
             }
 
             bool isVisible = CallIsVisible();

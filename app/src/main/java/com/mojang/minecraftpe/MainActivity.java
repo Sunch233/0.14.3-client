@@ -628,7 +628,7 @@ public class MainActivity extends NativeActivity implements View.OnKeyListener {
 //                } catch (Exception e) {
 //                    e.printStackTrace();
 //                }
-//            }, 300); // 300 毫秒的肉眼无感延迟，换来绝对的稳定性
+//            }, 300);
         }
 
     }
@@ -680,32 +680,29 @@ public class MainActivity extends NativeActivity implements View.OnKeyListener {
     }
 
     public void setupKeyboardViews(String str, int i, boolean z, boolean z2) {
-        // 1. 初始化并配置自定义的输入框
         this.textInputWidget = new TextInputProxyEditTextbox(this, i, z);
         this.textInputWidget.setFocusable(true);
         this.textInputWidget.setFocusableInTouchMode(true);
-        this.textInputWidget.setInputType(131072); // InputType.TYPE_TEXT_FLAG_MULTI_LINE
-        this.textInputWidget.setImeOptions(268435461); // EditorInfo.IME_ACTION_DONE 等组合标记
+        this.textInputWidget.setInputType(131072);
+        this.textInputWidget.setImeOptions(268435461);
         this.textInputWidget.setText(str);
 
         if (z2) {
-            this.textInputWidget.setInputType(2); // InputType.TYPE_CLASS_NUMBER (数字键盘)
+            this.textInputWidget.setInputType(2);
         }
 
-        // 2. 监听软键盘动作（回车/返回）
         this.textInputWidget.setOnEditorActionListener((TextView textView, int i2, KeyEvent keyEvent) -> {
             Log.w("mcpe - keyboard", "onEditorAction: " + i2);
-            if (i2 == 5) { // IME_ACTION_NEXT
+            if (i2 == 5) {
                 this.nativeReturnKeyPressed();
                 return true;
-            } else if (i2 == 7) { // IME_ACTION_PREVIOUS
+            } else if (i2 == 7) {
                 this.nativeBackPressed();
                 return true;
             }
             return false;
         });
 
-        // 3. 监听文字变动并实时同步到 C++ 游戏引擎
         this.textInputWidget.addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence charSequence, int start, int count, int after) {
@@ -721,7 +718,6 @@ public class MainActivity extends NativeActivity implements View.OnKeyListener {
             }
         });
 
-        // 这里的 AnonymousClass3 需要根据你项目里的实际定义来决定，保留原逻辑
         this.textInputWidget.setOnMCPEKeyWatcher(new AnonymousClass3(this));
 
         this.mHiddenTextInputDialog = new PopupWindow(this);
@@ -751,7 +747,6 @@ public class MainActivity extends NativeActivity implements View.OnKeyListener {
             return false;
         });
 
-        // 5. 极其魔幻的“显示-隐藏-再显示”逻辑（原版为了强行刷出某些旧版本 Android 软键盘的 Bug 解决方案，予以保留）
         this.mHiddenTextInputDialog.showAtLocation(linearLayout2, 0, -50000, 0);
         this.mHiddenTextInputDialog.setFocusable(true);
         this.mHiddenTextInputDialog.update();
@@ -761,7 +756,6 @@ public class MainActivity extends NativeActivity implements View.OnKeyListener {
         this.mHiddenTextInputDialog.setFocusable(true);
         this.mHiddenTextInputDialog.update();
 
-        // 6. 延时模拟点击输入框以强制弹出软键盘，并将光标移至末尾
         this.textInputWidget.postDelayed(() -> {
             long uptimeMillis = SystemClock.uptimeMillis();
 

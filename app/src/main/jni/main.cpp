@@ -13,6 +13,7 @@
 #include "Hook/VtableHook.h"
 #include "ImGuiInputIME.h"
 #include "ImguiInput.h"
+#include "ImguiManager.h"
 #include <string>
 #include <sstream>
 #include <Includes/obfuscate.h>
@@ -233,8 +234,8 @@ jint JNI_OnLoad(JavaVM *vm, void *unused) {
         LOGD(oss.str().c_str());
     }
 
+    GL_Hook_Init();
     initImGuiInput();
-
     return JNI_VERSION_1_6;
 }
 

@@ -8,6 +8,7 @@
 #include "MinecraftGame.h"
 #include "imgui_impl_android.h"
 #include "ImguiManager.h"
+
 int32_t (*orig_AInputQueue_getEvent)(AInputQueue *queue, AInputEvent **outEvent) = nullptr;
 int32_t my_AInputQueue_getEvent(AInputQueue *queue, AInputEvent **outEvent) {
     int32_t result = orig_AInputQueue_getEvent(queue, outEvent);
