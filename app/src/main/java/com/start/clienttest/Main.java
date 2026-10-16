@@ -2,7 +2,6 @@ package com.start.clienttest;
 
 import android.app.Activity;
 
-import com.irene.algui.IMEHelper;
 
 public class Main {
     public static Main instance;
@@ -18,6 +17,5 @@ public class Main {
         if (!PermissionTool.isStoragePermissionGranted(activity)) {
             PermissionTool.storePermission(activity);
         }
-        IMEHelper.init(activity);
     }
 }

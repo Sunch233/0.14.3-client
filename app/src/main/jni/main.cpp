@@ -11,9 +11,7 @@
 #include "MobEffect.h"
 #include "StrBuild.h"
 #include "Hook/VtableHook.h"
-#include "ImGuiInputIME.h"
-#include "ImguiInput.h"
-#include "ImguiManager.h"
+#include "settings/GraphicsSettings.h"
 #include <string>
 #include <sstream>
 #include <Includes/obfuscate.h>
@@ -222,7 +220,6 @@ jint JNI_OnLoad(JavaVM *vm, void *unused) {
             << ", baseAddress=0x" << Main::toHexString(Main::baseAddress);
         LOGD(oss.str().c_str());
 
-        ImGuiIME::Init(vm);
 
         mBlocks = getSymbolArray<Block *>("_ZN5Block7mBlocksE");
         mItems = getSymbolArray<Item *>("_ZN4Item6mItemsE");
@@ -234,8 +231,11 @@ jint JNI_OnLoad(JavaVM *vm, void *unused) {
         LOGD(oss.str().c_str());
     }
 
-    GL_Hook_Init();
-    initImGuiInput();
+    void* gameLibrary = dlopen("libminecraftpe.so", RTLD_NOW);
+    if (gameLibrary) {
+        graphicssettings::InstallVerified(gameLibrary);
+        dlclose(gameLibrary);
+    }
     return JNI_VERSION_1_6;
 }
 

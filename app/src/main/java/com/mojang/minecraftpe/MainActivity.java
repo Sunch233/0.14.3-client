@@ -515,9 +515,16 @@ public class MainActivity extends NativeActivity implements View.OnKeyListener {
         nativeBackPressed();
     }
 
+    private static native void nativeConfigureGraphics(String path);
+
     @Override // android.app.NativeActivity, android.app.Activity
     public void onCreate(Bundle bundle) {
         super.onCreate(bundle);
+        try {
+            nativeConfigureGraphics(new File(getFilesDir(), "advanced-graphics.cfg").getAbsolutePath());
+        } catch (UnsatisfiedLinkError error) {
+            Log.w(TAG, "Native graphics settings unavailable", error);
+        }
         Main.main(this);
         this.platform = Platform.createPlatform(true);
         setVolumeControlStream(3);

@@ -38,25 +38,16 @@ LOCAL_SRC_FILES := main.cpp \
 	xhook/xh_util.c \
 	xhook/xh_version.c \
 	xhook/xhook.c \
-	Imgui/imgui.cpp \
-    Imgui/imgui_draw.cpp \
-    Imgui/imgui_widgets.cpp \
-    Imgui/imgui_tables.cpp \
-    Imgui/backends/imgui_impl_android.cpp \
-    Imgui/backends/imgui_impl_opengl3.cpp \
-    Imgui/backends/imgui_Input_android.cpp \
-    Imgui/ImguiManager.cpp \
-    Imgui/ImGuiInputIME.cpp \
-    Imgui/ImguiInput.cpp \
-   	mcpe/MinecraftGame.cpp
+    settings/GraphicsOptions.cpp \
+    settings/GraphicsSettings.cpp \
+    settings/BinaryIdentity.cpp \
+    settings/SettingsBridge.cpp \
+    mcpe/MinecraftGame.cpp
 
 
 
 LOCAL_C_INCLUDES := $(LOCAL_PATH) \
-                    $(LOCAL_PATH)/mcpe \
-                    $(LOCAL_PATH)/Imgui \
-                    $(LOCAL_PATH)/Imgui/backends \
-                    $(LOCAL_PATH)/Imgui/font
+                    $(LOCAL_PATH)/mcpe
 
 
 include $(BUILD_SHARED_LIBRARY)
