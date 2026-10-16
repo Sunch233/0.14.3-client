@@ -1,4 +1,5 @@
 #include "GraphicsSettings.h"
+#include "InformationContent.h"
 #include <android/log.h>
 #include "Substrate/CydiaSubstrate.h"
 #include <dlfcn.h>
@@ -37,6 +38,10 @@ bool (*isSelected)(void*)=nullptr;
 bool (*isLocked)(void*)=nullptr;
 void* (*addOption)(void*,const Option&,void*)=nullptr;
 struct Color {float r,g,b,a;};
+void (*labelConstructor)(void*,void*,const std::string&,const Color&,int,int,int,bool)=nullptr;
+void (*labelText)(void*,const std::string&)=nullptr;
+constexpr const char* settingsTitle="高级设置";
+constexpr const char* informationTitle="关于";
 void* (*getFont)(void*)=nullptr;
 void (*drawText)(void*,const std::string&,float,float,const Color&,bool)=nullptr;
 int (*createButton)(void*,int,int,int,int,int,int)=nullptr;
@@ -55,42 +60,73 @@ void HudRender(void* self,void* client,void* control,int pass) {
 }
 
 void DeleteElement(void* p) {auto vt=*static_cast<void***>(p);reinterpret_cast<void(*)(void*)>(vt[1])(p);}
-bool Advanced(void* group) {return At<std::string>(group,68)=="高级图形";}
+void AddLabel(void* group,void* client,const std::string& text) {
+    void* raw=::operator new(0x58);
+    const Color color{.8f,.8f,.8f,1.f};
+    labelConstructor(raw,client,std::string(),color,0,0,0,true);
+    labelText(raw,text);
+    std::shared_ptr<void> label(raw,DeleteElement);
+    auto vt=*static_cast<void***>(group);
+    reinterpret_cast<void(*)(void*,std::shared_ptr<void>)>(vt[27])(group,label);
+}
+void* AddGroup(void* pane,const char* title) {
+    // Original constructor translates titles; use the verified raw title layout.
+    void* group=::operator new(0x48);
+    containerConstructor(group,false,true,0,0,24,24);
+    *static_cast<void**>(group)=static_cast<char*>(groupVtable)+8;
+    new(static_cast<char*>(group)+68) std::string(title);
+    At<PaneList>(pane,48).push_back(std::shared_ptr<void>(group,DeleteElement));
+    return group;
+}
+std::shared_ptr<void> CreatePane() {
+    void* raw=::operator new(0x70);
+    paneConstructor(raw);
+    return std::shared_ptr<void>(raw,DeleteElement);
+}
 void ScreenRender(void* screen,int x,int y,float dt) {
     originalScreenRender(screen,x,y,dt);
-    if(At<int>(screen,228)==1) return; // Skin-only screen has no category strip.
-    const auto& panes=At<PaneList>(screen,140);const auto& buttons=At<PaneList>(screen,200);
-    if(panes.empty() || panes.size()!=buttons.size()) return;
-    const auto& groups=At<PaneList>(panes.back().get(),48);
-    if(groups.empty() || !Advanced(groups[0].get())) return;
-    void* button=buttons.back().get();const Color gold{1.f,.85f,.35f,1.f};
-    drawText(getFont(At<void*>(screen,20)),"+",float(At<int>(button,8)+19),float(At<int>(button,12)+17),gold,false);
+    if(At<int>(screen,228)==1) return;
+    const auto& panes=At<PaneList>(screen,140);
+    const auto& buttons=At<PaneList>(screen,200);
+    if(panes.size()<2 || panes.size()!=buttons.size()) return;
+    void* font=getFont(At<void*>(screen,20));
+    if(!font) return;
+    for(std::size_t i=panes.size()-2;i<panes.size();++i) {
+        const auto& groups=At<PaneList>(panes[i].get(),48);
+        if(groups.empty()) continue;
+        const auto& title=At<std::string>(groups[0].get(),68);
+        const char* mark=title==settingsTitle?"+":title==informationTitle?"i":nullptr;
+        if(!mark) continue;
+        void* button=buttons[i].get();
+        const Color gold{1.f,.85f,.35f,1.f};
+        drawText(font,mark,float(At<int>(button,8)+19),float(At<int>(button,12)+17),gold,false);
+    }
 }
-
 void Buttons(void* screen) {
     originalButtons(screen);
+    if(At<int>(screen,228)==1) return;
     auto& buttons=At<PaneList>(screen,200);
-    // ID starts at 2, selection is ID - 2. Append without changing vanilla IDs.
-    createButton(screen,int(buttons.size())+2,At<int>(screen,164),134,28,0,0);
+    // Append categories in the same order as their panes; vanilla lays them out.
+    for(int i=0;i<2;++i)
+        createButton(screen,int(buttons.size())+2,At<int>(screen,164),134,28,0,0);
 }
 void Generate(void* screen) {
     originalGenerate(screen);
     auto& panes=At<PaneList>(screen,140);
     const auto& buttons=At<PaneList>(screen,200);
-    if(panes.size()<3 || panes.size()>5 || buttons.size()!=panes.size()+1) return;
-    void* raw=::operator new(0x70);paneConstructor(raw);
-    // The game destroys the concrete OptionsPane through its original virtual D0.
-    std::shared_ptr<void> pane(raw,DeleteElement);
+    if(panes.size()<3 || panes.size()>5 || buttons.size()!=panes.size()+2) return;
     void* client=At<void*>(screen,20);
-    // OptionsGroup's original constructor translates its title. Construct the
-    // verified 72-byte layout directly so this page never enters translation.
-    void* group=::operator new(0x48);
-    containerConstructor(group,false,true,0,0,24,24);
-    *static_cast<void**>(group)=static_cast<char*>(groupVtable)+8;
-    new(static_cast<char*>(group)+68) std::string("高级图形");
-    At<PaneList>(raw,48).push_back(std::shared_ptr<void>(group,DeleteElement));
-    addOption(group,fpsOption,client);
-    panes.push_back(std::move(pane));
+    auto settingsPane=CreatePane();
+    void* settingsGroup=AddGroup(settingsPane.get(),settingsTitle);
+    addOption(settingsGroup,fpsOption,client);
+    panes.push_back(std::move(settingsPane));
+
+    auto informationPane=CreatePane();
+    void* history=AddGroup(informationPane.get(),informationTitle);
+    for(const char* line:informationcontent::updates) AddLabel(history,client,line);
+    void* credits=AddGroup(informationPane.get(),"更新记录");
+    for(const char* line:informationcontent::credits) AddLabel(credits,client,line);
+    panes.push_back(std::move(informationPane));
 }
 bool Boolean(void* self,const Option* p) {
     return Custom(p)?Get().showFps:originalBoolean(self,p);
@@ -175,6 +211,8 @@ void InstallVerified(void* lib) {
     S("_ZN10GuiElement10isSelectedEv",isSelected);
     S("_ZN11OptionsItem9_isLockedEv",isLocked);
     S("_ZN12OptionsGroup13addOptionItemERKN7Options6OptionER15MinecraftClient",addOption);
+    S("_ZN5LabelC2ER15MinecraftClientRKSsRK5Coloriiib",labelConstructor);
+    S("_ZN5Label10setTextRawERKSs",labelText);
     S("_ZNK15MinecraftClient7getFontEv",getFont);
     S("_ZN4Font10drawShadowERKSsffRK5Colorb",drawText);
     S("_ZN13OptionsScreen20createCategoryButtonEiiiiii",createButton);

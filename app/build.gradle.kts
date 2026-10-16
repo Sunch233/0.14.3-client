@@ -3,7 +3,7 @@ plugins {
 }
 
 android {
-    namespace = "com.start.clienttest"
+    namespace = "com.mcpe.sunch.client0143"
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -11,7 +11,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.start.clienttest"
+        applicationId = "com.mcpe.sunch.client0143"
         minSdk = 24
         targetSdk = 36
         versionCode = 1

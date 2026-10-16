@@ -1,4 +1,4 @@
-package com.start.clienttest;
+package com.mcpe.sunch.client0143;
 
 import android.Manifest;
 import android.annotation.SuppressLint;

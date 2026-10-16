@@ -39,7 +39,7 @@ import android.widget.TextView;
 import com.mojang.android.StringValue;
 import com.mojang.minecraftpe.input.InputDeviceManager;
 import com.mojang.minecraftpe.platforms.Platform;
-import com.start.clienttest.Main;
+import com.mcpe.sunch.client0143.Main;
 
 import org.fmod.FMOD;
 import org.json.JSONException;
