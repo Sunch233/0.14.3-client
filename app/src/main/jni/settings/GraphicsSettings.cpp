@@ -12,7 +12,7 @@ bool Save() {
     const std::string temp=filePath+".tmp";
     FILE* f=std::fopen(temp.c_str(),"wb");
     if(!f) return false;
-    bool ok=std::fprintf(f,"version=1\nshowFps=%d\n",settings.showFps?1:0)>0;
+    bool ok=std::fprintf(f,"version=1\nshowFps=%d\nvsync=%d\n",settings.showFps?1:0,settings.vsync?1:0)>0;
     if(std::fclose(f)!=0) ok=false;
     if(ok) ok=std::rename(temp.c_str(),filePath.c_str())==0;
     if(!ok) std::remove(temp.c_str());
@@ -32,6 +32,7 @@ void Configure(const char* path) {
         int value;
         if(std::sscanf(line,"version=%d %c",&value,&tail)==1) version=value;
         else if(std::sscanf(line,"showFps=%d %c",&value,&tail)==1 && (value==0 || value==1)) loaded.showFps=value!=0;
+        else if(std::sscanf(line,"vsync=%d %c",&value,&tail)==1 && (value==0 || value==1)) loaded.vsync=value!=0;
     }
     std::fclose(f);
     if(version==1) settings=loaded;
@@ -43,4 +44,11 @@ void SetShowFps(bool enabled) {
     settings.showFps=enabled;
     if(!Save()) __android_log_print(ANDROID_LOG_WARN,"ClientSettings","Could not save FPS setting");
 }
+void SetVsync(bool enabled) {
+    std::lock_guard<std::mutex> lock(mutex);
+    if(settings.vsync==enabled) return;
+    settings.vsync=enabled;
+    if(!Save()) __android_log_print(ANDROID_LOG_WARN,"ClientSettings","Could not save VSync setting");
+}
+
 }

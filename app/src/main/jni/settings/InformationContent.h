@@ -7,6 +7,7 @@ constexpr const char* updates[] = {
     "更新QQ群 649857110",
     "感谢: ",
     "皓月当空 提供的native mod底包",
+    "",
 };
 constexpr const char* credits[] = {
     "暂无",

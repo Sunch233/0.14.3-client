@@ -18,8 +18,14 @@ namespace {
 struct Option {int type;std::string key;};
 static_assert(sizeof(Option)==8 && sizeof(std::shared_ptr<void>)==8 && sizeof(std::vector<std::shared_ptr<void>>)==12,"Options ABI");
 Option fpsOption{0,"帧数显示"};
+Option vsyncOption{0,"垂直同步"};
+unsigned char** rendererSettings=nullptr;
+void ApplyVsync() {
+    if(rendererSettings && *rendererSettings)
+        (*rendererSettings)[48]=Get().vsync?1:0;
+}
 std::string Number(int value) {char buffer[32];snprintf(buffer,sizeof(buffer),"%d",value);return buffer;}
-bool Custom(const Option* p) {return p==&fpsOption;}
+bool Custom(const Option* p) {return p==&fpsOption || p==&vsyncOption;}
 template<class T> T& At(void* p,unsigned offset) {return *reinterpret_cast<T*>(static_cast<char*>(p)+offset);}
 using PaneList=std::vector<std::shared_ptr<void>>;
 void (*originalGenerate)(void*)=nullptr;
@@ -119,6 +125,7 @@ void Generate(void* screen) {
     auto settingsPane=CreatePane();
     void* settingsGroup=AddGroup(settingsPane.get(),settingsTitle);
     addOption(settingsGroup,fpsOption,client);
+    addOption(settingsGroup,vsyncOption,client);
     panes.push_back(std::move(settingsPane));
 
     auto informationPane=CreatePane();
@@ -129,17 +136,22 @@ void Generate(void* screen) {
     panes.push_back(std::move(informationPane));
 }
 bool Boolean(void* self,const Option* p) {
-    return Custom(p)?Get().showFps:originalBoolean(self,p);
+    if(p==&fpsOption) return Get().showFps;
+    if(p==&vsyncOption) return Get().vsync;
+    return originalBoolean(self,p);
 }
 bool CanModify(void* self,const Option* p) {
+    if(p==&vsyncOption) return rendererSettings && *rendererSettings;
     return Custom(p)?true:originalCanModify(self,p);
 }
 void Toggle(void* self,const Option* p,int direction) {
-    if(Custom(p)) {SetShowFps(!Get().showFps);return;}
+    if(p==&fpsOption) {SetShowFps(!Get().showFps);return;}
+    if(p==&vsyncOption) {SetVsync(!Get().vsync);return;}
     originalToggle(self,p,direction);
 }
 void (*originalFrame)(void*,float)=nullptr;
 void Frame(void* self,float dt) {
+    ApplyVsync();
     BeginHudFrame();
     originalFrame(self,dt);
 }
@@ -202,6 +214,11 @@ void InstallVerified(void* lib) {
         if(!(a&1) || (a&~uintptr_t(1))-reinterpret_cast<uintptr_t>(image.dli_fbase)!=h.rva ||
            std::memcmp(reinterpret_cast<void*>(a&~uintptr_t(1)),expected,8)) return;
     }
+    auto* singleton=dlsym(lib,"_ZN3mce9SingletonINS_16RendererSettingsESt10unique_ptrIS1_St14default_deleteIS1_EEE8instanceE");
+    if(singleton && reinterpret_cast<uintptr_t>(singleton)-reinterpret_cast<uintptr_t>(image.dli_fbase)==0x75db9c)
+        rendererSettings=static_cast<unsigned char**>(singleton);
+    else
+        __android_log_print(ANDROID_LOG_WARN,"ClientSettings","VSync unavailable: renderer singleton mismatch");
     bool ok=true;
 #define S(name,target) target=reinterpret_cast<decltype(target)>(dlsym(lib,name));ok=ok && target
     S("_ZN11OptionsPaneC2Ev",paneConstructor);
