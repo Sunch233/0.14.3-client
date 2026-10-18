@@ -1,4 +1,8 @@
 {
+    "SunchDynamicLightConstants": [
+        { "Name": "SUNCH_LIGHT_ORIGIN", "Type": "Float4" },
+        { "Name": "SUNCH_LIGHT_CONTROL", "Type": "Float4" }
+    ],
     "RenderChunkConstants": [
         {
             "Name": "CHUNK_ORIGIN_AND_SCALE",

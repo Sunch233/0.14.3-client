@@ -1,4 +1,6 @@
 #include "GraphicsSettings.h"
+#include "DynamicLight.h"
+#include "TitleBranding.h"
 #include "InformationContent.h"
 #include <android/log.h>
 #include "Substrate/CydiaSubstrate.h"
@@ -19,6 +21,7 @@ struct Option {int type;std::string key;};
 static_assert(sizeof(Option)==8 && sizeof(std::shared_ptr<void>)==8 && sizeof(std::vector<std::shared_ptr<void>>)==12,"Options ABI");
 Option fpsOption{0,"帧数显示"};
 Option vsyncOption{0,"垂直同步"};
+Option dynamicLightOption{0,"动态光源"};
 Option blockInfoOption{0,"方块/实体信息显示"};
 unsigned char** rendererSettings=nullptr;
 void ApplyVsync() {
@@ -26,7 +29,7 @@ void ApplyVsync() {
         (*rendererSettings)[48]=Get().vsync?1:0;
 }
 std::string Number(int value) {char buffer[32];snprintf(buffer,sizeof(buffer),"%d",value);return buffer;}
-bool Custom(const Option* p) {return p==&fpsOption || p==&vsyncOption || p==&blockInfoOption;}
+bool Custom(const Option* p) {return p==&fpsOption || p==&vsyncOption || p==&blockInfoOption || p==&dynamicLightOption;}
 template<class T> T& At(void* p,unsigned offset) {return *reinterpret_cast<T*>(static_cast<char*>(p)+offset);}
 using PaneList=std::vector<std::shared_ptr<void>>;
 void (*originalGenerate)(void*)=nullptr;
@@ -346,11 +349,11 @@ void ScreenRender(void* screen,int x,int y,float dt) {
         const auto& groups=At<PaneList>(panes[i].get(),48);
         if(groups.empty()) continue;
         const auto& title=At<std::string>(groups[0].get(),68);
-        const char* mark=title==settingsTitle?"+":title==informationTitle?"i":nullptr;
+        const char* mark=title==settingsTitle?"更多":title==informationTitle?"关于":nullptr;
         if(!mark) continue;
         void* button=buttons[i].get();
         const Color gold{1.f,.85f,.35f,1.f};
-        drawText(font,mark,float(At<int>(button,8)+19),float(At<int>(button,12)+17),gold,false);
+        drawText(font,mark,float(At<int>(button,8)+4),float(At<int>(button,12)+17),gold,false);
     }
 }
 void Buttons(void* screen) {
@@ -373,6 +376,7 @@ void Generate(void* screen) {
     addOption(settingsGroup,vsyncOption,client);
     void* moreGroup=AddGroup(settingsPane.get(),moreTitle);
     addOption(moreGroup,blockInfoOption,client);
+    addOption(moreGroup,dynamicLightOption,client);
     panes.push_back(std::move(settingsPane));
 
     auto informationPane=CreatePane();
@@ -386,9 +390,11 @@ bool Boolean(void* self,const Option* p) {
     if(p==&fpsOption) return Get().showFps;
     if(p==&vsyncOption) return Get().vsync;
     if(p==&blockInfoOption) return Get().blockInfo;
+    if(p==&dynamicLightOption) return Get().dynamicLight;
     return originalBoolean(self,p);
 }
 bool CanModify(void* self,const Option* p) {
+    if(p==&dynamicLightOption) return dynamiclight::Available();
     if(p==&vsyncOption) return rendererSettings && *rendererSettings;
     return Custom(p)?true:originalCanModify(self,p);
 }
@@ -396,6 +402,7 @@ void Toggle(void* self,const Option* p,int direction) {
     if(p==&fpsOption) {SetShowFps(!Get().showFps);return;}
     if(p==&vsyncOption) {SetVsync(!Get().vsync);return;}
     if(p==&blockInfoOption) {SetBlockInfo(!Get().blockInfo);return;}
+    if(p==&dynamicLightOption) {SetDynamicLight(!Get().dynamicLight);return;}
     originalToggle(self,p,direction);
 }
 void (*originalFrame)(void*,float)=nullptr;
@@ -523,6 +530,8 @@ void InstallVerified(void* lib) {
     if(!ok) return;
     for(unsigned i=0;i<sizeof(hooks)/sizeof(hooks[0]);++i)
         MSHookFunction(targets[i],hooks[i].replace,hooks[i].original);
+    dynamiclight::InstallVerified(lib);
+    titlebranding::InstallVerified(lib);
     __android_log_print(ANDROID_LOG_INFO,"ClientSettings","Native advanced graphics hooks installed");
 }
 }

@@ -39,6 +39,8 @@ varying vec2 uv1;
 
 
 varying vec4 color;
+varying vec3 sunchLightVector;
+uniform vec4 SUNCH_LIGHT_CONTROL;
 
 #ifdef FOG
 varying vec4 fogColor;
@@ -74,7 +76,14 @@ void main()
 	 	discard;
 #endif
 	
-	diffuse = diffuse * texture2D( TEXTURE_1, uv1 );
+    vec2 sunchLightUV = uv1;
+    if (SUNCH_LIGHT_CONTROL.x > 0.0) {
+        // Middle ground between the dim 2-level and bright 1-level falloffs.
+        float lightDistance = length(sunchLightVector);
+        float heldLevel = max(0.0, SUNCH_LIGHT_CONTROL.x - 1.5 * lightDistance);
+        sunchLightUV.x = max(sunchLightUV.x, min(0.96875, (heldLevel + 0.5) / 16.0));
+    }
+    diffuse = diffuse * texture2D(TEXTURE_1, sunchLightUV);
 
 #ifndef SEASONS
 

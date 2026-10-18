@@ -28,6 +28,8 @@ varying vec2 uv1;
 
 
 varying vec4 color;
+varying vec3 sunchLightVector;
+uniform POS4 SUNCH_LIGHT_ORIGIN;
 #ifdef FOG
 	varying vec4 fogColor;
 #endif
@@ -62,6 +64,7 @@ void main()
     POS4 worldPos;
     worldPos.xyz = (POSITION.xyz * CHUNK_ORIGIN_AND_SCALE.w) + CHUNK_ORIGIN_AND_SCALE.xyz;
     worldPos.w = 1.0;
+    sunchLightVector = worldPos.xyz - SUNCH_LIGHT_ORIGIN.xyz;
 
     // Transform to view space before projection instead of all at once to avoid floating point errors
     // Not required for entities because they are already offset by camera translation before rendering
