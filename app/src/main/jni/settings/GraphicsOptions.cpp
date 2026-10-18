@@ -19,7 +19,7 @@ struct Option {int type;std::string key;};
 static_assert(sizeof(Option)==8 && sizeof(std::shared_ptr<void>)==8 && sizeof(std::vector<std::shared_ptr<void>>)==12,"Options ABI");
 Option fpsOption{0,"帧数显示"};
 Option vsyncOption{0,"垂直同步"};
-Option blockInfoOption{0,"方块信息显示"};
+Option blockInfoOption{0,"方块/实体信息显示"};
 unsigned char** rendererSettings=nullptr;
 void ApplyVsync() {
     if(rendererSettings && *rendererSettings)
@@ -61,6 +61,17 @@ void* (*getInput)(void*)=nullptr;
 bool (*useFreeformPick)(void*)=nullptr;
 bool (*allowPicking)(void*)=nullptr;
 void** blockArray=nullptr; // Block::mBlocks
+bool (*isMob)(const void*)=nullptr;
+int (*mobHealth)(const void*)=nullptr;
+int (*mobMaxHealth)(const void*)=nullptr;
+const std::string& (*entityNameTag)(const void*)=nullptr;
+void (*mobNameKey)(std::string*,int)=nullptr;
+void (*translate)(std::string*,const std::string&)=nullptr;
+void (*loadTexture)(void*,void*,const std::string&,int)=nullptr;
+void (*destroyTexture)(void*)=nullptr;
+void* (*screenRendererInstance)()=nullptr;
+void (*blitTexture)(void*,const void*,int,int,int,int,int,int,int,int,void*)=nullptr;
+bool entityTooltipAvailable=false;
 void* (*getTextures)(void*)=nullptr;
 void* (*getItemRenderer)()=nullptr;
 // Same entrypoint and argument order as InventoryScreen::_renderGridItem.
@@ -174,6 +185,65 @@ std::string BlockName(void* block,void* instance) {
     if(name.size()>5 && name.compare(0,5,"tile.")==0) name.erase(0,5);
     return name;
 }
+// Per-frame entity access only. Never retain a hit pointer across engine frames.
+void DrawEntityInfo(void* client,void* font,void* entity) {
+    if(!entity || !entityTooltipAvailable) return;
+    auto vt=*static_cast<void***>(entity);
+    const int type=reinterpret_cast<int(*)(const void*)>(vt[83])(entity);
+    const bool living=isMob(entity);
+    std::string name=entityNameTag(entity);
+    if(name.empty()) {
+        std::string key;
+        mobNameKey(&key,type);
+        key+=".name";
+        translate(&name,key);
+        if(name.empty() || name==key) name="实体 #"+Number(type&255);
+    }
+    int health=0,maximum=0;
+    if(living) {
+        maximum=std::max(0,mobMaxHealth(entity));
+        health=std::max(0,std::min(maximum,mobHealth(entity)));
+    }
+    void* gui=At<void*>(client,304);
+    void* textures=getTextures(client);
+    if(!gui || !textures) return;
+    const int screenWidth=guiScreenWidth(gui);
+    if(screenWidth<96) return;
+    const int padding=6;
+    name=FitTooltipText(font,name,screenWidth-20);
+    const int hearts=std::min(20,maximum/2+maximum%2);
+    const int rows=(hearts+9)/10;
+    const std::string numeric=maximum>40?Number(health)+" / "+Number(maximum):"";
+    const int heartWidth=std::min(hearts,10)*8+1;
+    int width=std::max(80,lineLength(font,name,1.f,false)+padding*2);
+    width=std::max(width,lineLength(font,numeric,1.f,false)+padding*2);
+    width=std::max(width,heartWidth+padding*2);
+    const int height=padding*2+8+(rows?rows*10+2:0)+(numeric.empty()?0:10);
+    const int left=(screenWidth-width)/2,top=4;
+    DrawTooltipBackground(textures,float(left),float(top),float(width),float(height));
+    drawText(font,name,float(left+padding),float(top+padding),Color{1.f,1.f,1.f,1.f},false);
+    int y=top+padding+10;
+    if(hearts) {
+        alignas(4) unsigned char icons[16]{};
+        loadTexture(icons,textures,std::string("gui/icons.png"),0);
+        void* renderer=screenRendererInstance();
+        for(int i=0;i<hearts;++i) {
+            const int x=left+padding+(i%10)*8;
+            const int rowY=y+(i/10)*10;
+            // Same atlas cells as the original HUD: empty, full and half heart.
+            blitTexture(renderer,icons,x,rowY,16,0,9,9,0,0,nullptr);
+            const int remaining=health-i*2;
+            if(remaining>0) blitTexture(renderer,icons,x,rowY,remaining>=2?52:61,0,9,9,0,0,nullptr);
+        }
+        destroyTexture(icons);
+        y+=rows*10;
+    }
+    if(!numeric.empty()) {
+        drawText(font,numeric,float(left+padding),float(y),Color{1.f,.7f,.7f,1.f},false);
+        y+=10;
+    }
+
+}
 void DrawBlockInfo(void* client,void* font) {
     void* input=getInput(client);
     if(!input) return;
@@ -187,6 +257,10 @@ void DrawBlockInfo(void* client,void* font) {
     // Level::mHitResult, refreshed each frame by InGamePlayScreen::_pick for
     // the active pick (touch ray or crosshair), so both input modes are covered.
     char* hit=static_cast<char*>(level)+344;
+    if(At<int>(hit,0)==1) {
+        DrawEntityInfo(client,font,At<void*>(hit,32));
+        return;
+    }
     if(At<int>(hit,0)!=0) return; // 0 = block
     const int x=At<int>(hit,8),y=At<int>(hit,12),z=At<int>(hit,16);
     void* player=At<void*>(client,288);
@@ -430,6 +504,22 @@ void InstallVerified(void* lib) {
     S("_ZN14NinePatchLayer4drawER11Tessellatorff",patchDraw);
     S("_ZN11Tessellator8instanceE",tessellator);
 #undef S
+    // A missing entity helper must not disable the existing settings/FPS hooks.
+    bool entityOk=true;
+#define E(name,target) target=reinterpret_cast<decltype(target)>(dlsym(lib,name));entityOk=entityOk && target
+    E("_ZN15EntityClassTree5isMobERK6Entity",isMob);
+    E("_ZNK3Mob9getHealthEv",mobHealth);
+    E("_ZNK3Mob12getMaxHealthEv",mobMaxHealth);
+    E("_ZNK6Entity10getNameTagEv",entityNameTag);
+    E("_ZN10MobFactory12GetMobNameIDE10EntityType",mobNameKey);
+    E("_ZN4I18n3getERKSs",translate);
+    E("_ZN3mce12TextureGroup10getTextureERKSs15TextureLocation",loadTexture);
+    E("_ZN3mce10TexturePtrD2Ev",destroyTexture);
+    E("_ZN14ScreenRenderer9singletonEv",screenRendererInstance);
+    E("_ZN14ScreenRenderer4blitERKN3mce10TexturePtrEiiiiiiiiPNS0_11MaterialPtrE",blitTexture);
+#undef E
+    entityTooltipAvailable=entityOk;
+    if(!entityOk) __android_log_print(ANDROID_LOG_WARN,"ClientSettings","Entity tooltip helpers unavailable");
     if(!ok) return;
     for(unsigned i=0;i<sizeof(hooks)/sizeof(hooks[0]);++i)
         MSHookFunction(targets[i],hooks[i].replace,hooks[i].original);
