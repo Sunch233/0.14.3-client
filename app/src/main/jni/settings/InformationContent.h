@@ -1,6 +1,7 @@
 #pragma once
 
 namespace informationcontent {
+constexpr const char* version = "1.0.0";
 constexpr const char* updates[] = {
     "MCPE0.14 Sunch Client",
     "作者Sunch233 QQ2125696621",
@@ -10,6 +11,7 @@ constexpr const char* updates[] = {
     "",
 };
 constexpr const char* credits[] = {
-    "暂无",
+    "1.0.0: ",
+    " - 实现了帧数显示 垂直同步 游戏内信息显示 动态光源功能",
 };
 }

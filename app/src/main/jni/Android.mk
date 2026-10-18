@@ -40,6 +40,7 @@ LOCAL_SRC_FILES := main.cpp \
 	xhook/xhook.c \
     settings/GraphicsOptions.cpp \
     settings/DynamicLight.cpp \
+    settings/TitleBranding.cpp \
     settings/GraphicsSettings.cpp \
     settings/BinaryIdentity.cpp \
     settings/SettingsBridge.cpp \

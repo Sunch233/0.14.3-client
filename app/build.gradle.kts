@@ -14,8 +14,8 @@ android {
         applicationId = "com.mcpe.sunch.client0143"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 1000
+        versionName = "1.0.0"
         externalNativeBuild {
             ndkBuild {
                 abiFilters.addAll(listOf("armeabi-v7a"))
