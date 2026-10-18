@@ -19,13 +19,14 @@ struct Option {int type;std::string key;};
 static_assert(sizeof(Option)==8 && sizeof(std::shared_ptr<void>)==8 && sizeof(std::vector<std::shared_ptr<void>>)==12,"Options ABI");
 Option fpsOption{0,"帧数显示"};
 Option vsyncOption{0,"垂直同步"};
+Option blockInfoOption{0,"方块信息显示"};
 unsigned char** rendererSettings=nullptr;
 void ApplyVsync() {
     if(rendererSettings && *rendererSettings)
         (*rendererSettings)[48]=Get().vsync?1:0;
 }
 std::string Number(int value) {char buffer[32];snprintf(buffer,sizeof(buffer),"%d",value);return buffer;}
-bool Custom(const Option* p) {return p==&fpsOption || p==&vsyncOption;}
+bool Custom(const Option* p) {return p==&fpsOption || p==&vsyncOption || p==&blockInfoOption;}
 template<class T> T& At(void* p,unsigned offset) {return *reinterpret_cast<T*>(static_cast<char*>(p)+offset);}
 using PaneList=std::vector<std::shared_ptr<void>>;
 void (*originalGenerate)(void*)=nullptr;
@@ -47,10 +48,101 @@ struct Color {float r,g,b,a;};
 void (*labelConstructor)(void*,void*,const std::string&,const Color&,int,int,int,bool)=nullptr;
 void (*labelText)(void*,const std::string&)=nullptr;
 constexpr const char* settingsTitle="高级设置";
+constexpr const char* moreTitle="更多功能";
 constexpr const char* informationTitle="关于";
 void* (*getFont)(void*)=nullptr;
 void (*drawText)(void*,const std::string&,float,float,const Color&,bool)=nullptr;
 int (*createButton)(void*,int,int,int,int,int,int)=nullptr;
+void (*blockAndData)(void*,void*,int,int,int)=nullptr; // out{u8 id,u8 data},BlockSource,x,y,z
+void (*itemGetName)(std::string*,void*)=nullptr; // ItemInstance::getName(out,instance)
+int (*lineLength)(void*,const std::string&,float,bool)=nullptr;
+int (*guiScreenWidth)(void*)=nullptr;
+void* (*getInput)(void*)=nullptr;
+bool (*useFreeformPick)(void*)=nullptr;
+bool (*allowPicking)(void*)=nullptr;
+void** blockArray=nullptr; // Block::mBlocks
+void* (*getTextures)(void*)=nullptr;
+void* (*getItemRenderer)()=nullptr;
+// Same entrypoint and argument order as InventoryScreen::_renderGridItem.
+// icon frame, x, y, alpha, brightness, scale, force glint.
+void (*renderGuiItem)(void*,const void*,int,float,float,float,float,float,bool)=nullptr;
+void (*patchFactoryConstructor)(void*,void*,const std::string&)=nullptr;
+void (*createPatch)(void**,void*,const int*,int,int,float,float)=nullptr;
+void (*patchSetSize)(void*,float,float)=nullptr;
+void (*patchSetExcluded)(void*,int)=nullptr;
+void (*fillRect)(void*,float,float,float,float,const Color&)=nullptr;
+void (*setShaderColor)(void*,const Color&)=nullptr;
+void* shaderColor=nullptr;
+void (*patchDraw)(void*,void*,float,float)=nullptr;
+void* tessellator=nullptr;
+void* tooltipPatch=nullptr;
+void* tooltipTextures=nullptr;
+
+// NinePatchFactory's native ABI: TextureGroup*, GNU string, width, height.
+struct PatchFactory {
+    alignas(4) unsigned char storage[16];
+    explicit PatchFactory(void* textures) {
+        patchFactoryConstructor(storage,textures,std::string("gui/purpleBorder.png"));
+    }
+    ~PatchFactory() {
+        reinterpret_cast<std::string*>(storage+4)->~basic_string();
+    }
+};
+// asItemInstance returns an owning ItemInstance; its CompoundTag is at +8.
+struct BlockItem {
+    alignas(8) unsigned char storage[40]{};
+    BlockItem(void* block,void* region,const int* pos,int data) {
+        void* const* vt=*static_cast<void* const**>(block);
+        reinterpret_cast<void(*)(void*,void*,void*,const int*,int)>(vt[50])
+            (storage,block,region,pos,data);
+    }
+    ~BlockItem() {
+        void* tag=At<void*>(storage,8);
+        if(tag) {
+            auto vt=*static_cast<void***>(tag);
+            reinterpret_cast<void(*)(void*)>(vt[1])(tag);
+        }
+    }
+};
+void DrawTooltipBackground(void* textures,float x,float y,float width,float height) {
+    if(tooltipTextures!=textures) {
+        if(tooltipPatch) {
+            auto vt=*static_cast<void***>(tooltipPatch);
+            reinterpret_cast<void(*)(void*)>(vt[1])(tooltipPatch);
+            tooltipPatch=nullptr;
+        }
+        tooltipTextures=textures;
+    }
+    if(!tooltipPatch) {
+        PatchFactory factory(textures);
+        const int rectangle[4]={0,0,16,16};
+        // Match vanilla HoverTextRenderer: 3-pixel corners from purpleBorder.png.
+        createPatch(&tooltipPatch,factory.storage,rectangle,3,3,width,height);
+        // Only replace the center quad; preserve all eight purple border patches.
+        if(tooltipPatch) patchSetExcluded(tooltipPatch,1<<4);
+    }
+    if(tooltipPatch) {
+        const Color previousColor=At<Color>(shaderColor,0);
+        const Color background{16.f/255.f,0.f,16.f/255.f,.55f};
+        // ScreenRenderer::fill does not access its instance (verified in IDA).
+        alignas(4) unsigned char screenRenderer[4]{};
+        fillRect(screenRenderer,x+3.f,y+3.f,x+width-3.f,y+height-3.f,background);
+        setShaderColor(shaderColor,previousColor);
+        patchSetSize(tooltipPatch,width,height);
+        patchDraw(tooltipPatch,tessellator,x,y);
+    }
+}
+std::string FitTooltipText(void* font,std::string text,int maxWidth) {
+    if(lineLength(font,text,1.f,false)<=maxWidth) return text;
+    const std::string suffix="...";
+    while(!text.empty() && lineLength(font,text+suffix,1.f,false)>maxWidth) {
+        // Remove a complete UTF-8 codepoint, including translated block names.
+        std::size_t start=text.size()-1;
+        while(start && (static_cast<unsigned char>(text[start])&0xc0)==0x80) --start;
+        text.erase(start);
+    }
+    return text+suffix;
+}
 
 // Render-thread state. Count engine frames, not HUD passes or simulation ticks.
 using FpsClock=std::chrono::steady_clock;
@@ -58,11 +150,90 @@ FpsClock::time_point fpsStart{},fpsPrevious{};
 unsigned fpsFrames=0;
 bool fpsEnabled=false,fpsSampling=false;
 std::string fpsText="FPS: --";
+std::string blockText;
+bool blockInfoEnabled=false;
+// Meta-aware localized name through the inventory tooltip chain:
+// asItemInstance (vtable+200) builds the block's ItemInstance with the
+// world data value, then ItemInstance::getName resolves the name. Some
+// block subclasses have stub name overrides (leaves, skulls), so the
+// item-side overrides (LeafBlockItem, SkullItem, ClothBlockItem, ...)
+// supply the proper per-meta keys.
+std::string BlockName(void* block,void* instance) {
+    void* const* vt=*static_cast<void* const**>(block);
+    std::string name;
+    if(At<void*>(instance,12))
+        // ItemInstance::getName: the exact inventory tooltip chain. Per-meta
+        // item overrides handle what the block stubs do not (leaf types via
+        // tile.leaves.*, skull types via item.skull.*, wool colors, ...).
+        itemGetName(&name,instance);
+    else
+        // Blocks without an item (fire, bedrock, ...): ask the block itself.
+        reinterpret_cast<void(*)(std::string*,void*,void*)>(vt[81])(&name,block,instance);
+    // Untranslated keys look like "tile.xxx[.yyy].name"; strip to the raw ids.
+    if(name.size()>5 && name.compare(name.size()-5,5,".name")==0) name.erase(name.size()-5);
+    if(name.size()>5 && name.compare(0,5,"tile.")==0) name.erase(0,5);
+    return name;
+}
+void DrawBlockInfo(void* client,void* font) {
+    void* input=getInput(client);
+    if(!input) return;
+    // Touch picking leaves the last HitResult intact after finger-up. Match the
+    // native interaction state instead of treating that cached hit as active.
+    // Split controls / mouse / gamepad keep their continuous crosshair picking.
+    if(useFreeformPick(input) && !allowPicking(input)) return;
+    void* gameRenderer=At<void*>(client,104);
+    void* level=gameRenderer?At<void*>(gameRenderer,8):nullptr;
+    if(!level) return;
+    // Level::mHitResult, refreshed each frame by InGamePlayScreen::_pick for
+    // the active pick (touch ray or crosshair), so both input modes are covered.
+    char* hit=static_cast<char*>(level)+344;
+    if(At<int>(hit,0)!=0) return; // 0 = block
+    const int x=At<int>(hit,8),y=At<int>(hit,12),z=At<int>(hit,16);
+    void* player=At<void*>(client,288);
+    if(!player) return;
+    void* region=At<void*>(player,364);
+    if(!region) return;
+    struct Tile {unsigned char id,data;};
+    Tile tile{};
+    blockAndData(&tile,region,x,y,z);
+    if(!tile.id) return;
+    const int pos[3]={x,y,z};
+    void* block=blockArray?blockArray[tile.id]:nullptr;
+    if(!block) return;
+    BlockItem item(block,region,pos,tile.data);
+    // Resolve translated names on every draw so language/world changes are reflected.
+    blockText=BlockName(block,item.storage);
+    if(blockText.empty()) blockText=Number(tile.id);
+    const std::string meta=Number(tile.id)+":"+Number(tile.data);
+    void* gui=At<void*>(client,304);
+    void* textures=getTextures(client);
+    void* renderer=getItemRenderer();
+    if(!gui || !textures || !renderer) return;
+    const int screenWidth=guiScreenWidth(gui);
+    if(screenWidth<64) return;
+    // Logical GUI pixels scale with the game's UI. Reserve 16px for the icon.
+    const int padding=6,textOffset=28,height=28;
+    blockText=FitTooltipText(font,blockText,screenWidth-8-textOffset-padding);
+    const int contentWidth=std::max(lineLength(font,blockText,1.f,false),lineLength(font,meta,1.f,false));
+    const int width=std::max(80,textOffset+contentWidth+padding);
+    const int left=(screenWidth-width)/2,top=4;
+    DrawTooltipBackground(textures,float(left),float(top),float(width),float(height));
+    // Use the inventory's 16x16 slot origin, not renderGuiItemCorrect's legacy
+    // matrix origin. The modern path resolves mItemGraphics and preserves the
+    // texture UV/alpha/tint for plants and other non-cube block icons.
+    constexpr int iconSize=16;
+    const float iconX=float(left+padding);
+    const float iconY=float(top)+(float(height)-iconSize)*.5f;
+    renderGuiItem(renderer,item.storage,0,iconX,iconY,1.f,1.f,1.f,false);
+    drawText(font,blockText,float(left+textOffset),float(top+6),Color{1.f,1.f,1.f,1.f},false);
+    drawText(font,meta,float(left+textOffset),float(top+16),Color{.33f,.33f,1.f,1.f},false);
+}
 void HudRender(void* self,void* client,void* control,int pass) {
     originalHudRender(self,client,control,pass);
-    if(!fpsEnabled) return;
     void* font=getFont(client);
-    if(font) drawText(font,fpsText,4.f,4.f,Color{1.f,1.f,1.f,1.f},false);
+    if(!font) return;
+    if(fpsEnabled) drawText(font,fpsText,4.f,4.f,Color{1.f,1.f,1.f,1.f},false);
+    if(blockInfoEnabled) DrawBlockInfo(client,font);
 }
 
 void DeleteElement(void* p) {auto vt=*static_cast<void***>(p);reinterpret_cast<void(*)(void*)>(vt[1])(p);}
@@ -126,6 +297,8 @@ void Generate(void* screen) {
     void* settingsGroup=AddGroup(settingsPane.get(),settingsTitle);
     addOption(settingsGroup,fpsOption,client);
     addOption(settingsGroup,vsyncOption,client);
+    void* moreGroup=AddGroup(settingsPane.get(),moreTitle);
+    addOption(moreGroup,blockInfoOption,client);
     panes.push_back(std::move(settingsPane));
 
     auto informationPane=CreatePane();
@@ -138,6 +311,7 @@ void Generate(void* screen) {
 bool Boolean(void* self,const Option* p) {
     if(p==&fpsOption) return Get().showFps;
     if(p==&vsyncOption) return Get().vsync;
+    if(p==&blockInfoOption) return Get().blockInfo;
     return originalBoolean(self,p);
 }
 bool CanModify(void* self,const Option* p) {
@@ -147,6 +321,7 @@ bool CanModify(void* self,const Option* p) {
 void Toggle(void* self,const Option* p,int direction) {
     if(p==&fpsOption) {SetShowFps(!Get().showFps);return;}
     if(p==&vsyncOption) {SetVsync(!Get().vsync);return;}
+    if(p==&blockInfoOption) {SetBlockInfo(!Get().blockInfo);return;}
     originalToggle(self,p,direction);
 }
 void (*originalFrame)(void*,float)=nullptr;
@@ -180,6 +355,7 @@ const Hook hooks[]={
 #undef O
 }
 void BeginHudFrame() {
+    blockInfoEnabled=Get().blockInfo;
     fpsEnabled=Get().showFps;
     if(!fpsEnabled) {fpsSampling=false;return;}
     const auto now=FpsClock::now();
@@ -233,6 +409,26 @@ void InstallVerified(void* lib) {
     S("_ZNK15MinecraftClient7getFontEv",getFont);
     S("_ZN4Font10drawShadowERKSsffRK5Colorb",drawText);
     S("_ZN13OptionsScreen20createCategoryButtonEiiiiii",createButton);
+    S("_ZN11BlockSource15getBlockAndDataEiii",blockAndData);
+    S("_ZNK12ItemInstance7getNameEv",itemGetName);
+    S("_ZNK4Font13getLineLengthERKSsfb",lineLength);
+    S("_ZNK7GuiData14getScreenWidthEv",guiScreenWidth);
+    S("_ZNK15MinecraftClient8getInputEv",getInput);
+    S("_ZNK21MinecraftInputHandler24useFreeformPickDirectionEv",useFreeformPick);
+    S("_ZNK21MinecraftInputHandler12allowPickingEv",allowPicking);
+    S("_ZN5Block7mBlocksE",blockArray);
+    S("_ZNK15MinecraftClient11getTexturesEv",getTextures);
+    S("_ZN12ItemRenderer11getInstanceEv",getItemRenderer);
+    S("_ZN12ItemRenderer16renderGuiItemNewEPK12ItemInstanceifffffb",renderGuiItem);
+    S("_ZN16NinePatchFactoryC2EPN3mce12TextureGroupERKSs",patchFactoryConstructor);
+    S("_ZN16NinePatchFactory23createUniqueSymmetricalERK12IntRectangleiiff",createPatch);
+    S("_ZN14NinePatchLayer7setSizeEff",patchSetSize);
+    S("_ZN14NinePatchLayer11setExcludedEi",patchSetExcluded);
+    S("_ZNK14ScreenRenderer4fillEffffRK5Color",fillRect);
+    S("_ZN11ShaderColor8setColorERK5Color",setShaderColor);
+    S("currentShaderColor",shaderColor);
+    S("_ZN14NinePatchLayer4drawER11Tessellatorff",patchDraw);
+    S("_ZN11Tessellator8instanceE",tessellator);
 #undef S
     if(!ok) return;
     for(unsigned i=0;i<sizeof(hooks)/sizeof(hooks[0]);++i)
