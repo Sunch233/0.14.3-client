@@ -11,7 +11,9 @@
 #include "MobEffect.h"
 #include "StrBuild.h"
 #include "Hook/VtableHook.h"
-#include "settings/GraphicsSettings.h"
+#include "engine/Engine.h"
+#include "features/Features.h"
+#include "settings/GraphicsOptions.h"
 #include <string>
 #include <sstream>
 #include <Includes/obfuscate.h>
@@ -233,7 +235,10 @@ jint JNI_OnLoad(JavaVM *vm, void *unused) {
 
     void* gameLibrary = dlopen("libminecraftpe.so", RTLD_NOW);
     if (gameLibrary) {
-        graphicssettings::InstallVerified(gameLibrary);
+        if(engine::VerifyBinary(gameLibrary)) {
+            features::InstallVerified(gameLibrary);
+            settingsui::InstallVerified(gameLibrary);
+        }
         dlclose(gameLibrary);
     }
     return JNI_VERSION_1_6;

@@ -39,10 +39,16 @@ LOCAL_SRC_FILES := main.cpp \
 	xhook/xh_version.c \
 	xhook/xhook.c \
     settings/GraphicsOptions.cpp \
-    settings/DynamicLight.cpp \
-    settings/TitleBranding.cpp \
+    features/Features.cpp \
+    features/Hud.cpp \
+    features/FpsCounter.cpp \
+    features/TargetInfo.cpp \
+    features/VSync.cpp \
+    features/DynamicLight.cpp \
+    features/TitleBranding.cpp \
     settings/GraphicsSettings.cpp \
-    settings/BinaryIdentity.cpp \
+    engine/BinaryIdentity.cpp \
+    engine/Engine.cpp \
     settings/SettingsBridge.cpp \
     mcpe/MinecraftGame.cpp
 

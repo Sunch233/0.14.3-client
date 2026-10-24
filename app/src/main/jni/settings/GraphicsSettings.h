@@ -8,7 +8,4 @@ void SetShowFps(bool enabled);
 void SetVsync(bool enabled);
 void SetBlockInfo(bool enabled);
 void SetDynamicLight(bool enabled);
-void BeginHudFrame();
-void InstallVerified(void* library);
-bool Sha256File(const char* path,std::string& digest);
 }

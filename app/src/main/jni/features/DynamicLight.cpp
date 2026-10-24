@@ -1,6 +1,6 @@
 #include "DynamicLight.h"
-#include "GraphicsSettings.h"
-#include "Substrate/CydiaSubstrate.h"
+#include "engine/Engine.h"
+#include "settings/GraphicsSettings.h"
 class TextureUVCoordinateSet;
 #include "mcpe/MinecraftGame.h"
 #include <android/log.h>
@@ -11,7 +11,7 @@ class TextureUVCoordinateSet;
 #include <dlfcn.h>
 #include <string>
 
-namespace dynamiclight {
+namespace features { namespace dynamiclight {
 namespace {
 struct Vec3 {float x,y,z;};
 struct Float4 {float x=0,y=0,z=0,w=0;};
@@ -94,16 +94,12 @@ void World(void* self,void* camera,void* frustum,void* other,float dt,float part
     // Keep GUI previews and other later render passes free of scene lighting.
     Submit(Float4{},Float4{});
 }
+const engine::Hook hooks[]={
+    {"_ZN13LevelRenderer11renderLevelER6EntityR13FrustumCullerS3_ff",0x49bdb8,"10b49ded010added",reinterpret_cast<void*>(World),reinterpret_cast<void**>(&originalWorld)},
+};
 }
 bool Available() {return available;}
 void InstallVerified(void* lib) {
-    void* target=dlsym(lib,"_ZN13LevelRenderer11renderLevelER6EntityR13FrustumCullerS3_ff");
-    Dl_info image{};
-    if(!target || !dladdr(target,&image)) return;
-    const uintptr_t address=reinterpret_cast<uintptr_t>(target);
-    const unsigned char prefix[]={0x10,0xb4,0x9d,0xed,0x01,0x0a,0xdd,0xed};
-    if(!(address&1) || (address&~uintptr_t(1))-reinterpret_cast<uintptr_t>(image.dli_fbase)!=0x49bdb8 ||
-       std::memcmp(reinterpret_cast<void*>(address&~uintptr_t(1)),prefix,8)) return;
     bool ok=true;
 #define S(name,value) value=reinterpret_cast<decltype(value)>(dlsym(lib,name));ok=ok && value
     S("_ZN3mce9SingletonINS_27GlobalConstantBufferManagerESt10unique_ptrIS1_St14default_deleteIS1_EEE8instanceE",managerSlot);
@@ -118,7 +114,8 @@ void InstallVerified(void* lib) {
     S("_ZNK6Entity23getInterpolatedPositionEf",interpolatedPosition);
 #undef S
     if(!ok) {__android_log_print(ANDROID_LOG_WARN,"SunchDynamicLight","Missing engine helpers");return;}
-    MSHookFunction(target,reinterpret_cast<void*>(World),reinterpret_cast<void**>(&originalWorld));
-    available=originalWorld!=nullptr;
+    if(engine::InstallHooks(lib,hooks,sizeof(hooks)/sizeof(hooks[0])))
+        available=originalWorld!=nullptr;
 }
 }
+} // namespace features

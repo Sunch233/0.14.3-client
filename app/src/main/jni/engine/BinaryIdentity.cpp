@@ -1,9 +1,9 @@
-#include "GraphicsSettings.h"
+#include "Engine.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <algorithm>
-namespace graphicssettings {
+namespace engine {
 namespace {
 struct Hash {
     std::uint32_t h[8] = {0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,
@@ -77,4 +77,4 @@ bool Sha256File(const char* path, std::string& digest) {
     if(ok) digest=hash.Finish();
     return ok;
 }
-} // namespace graphicssettings
+} // namespace engine

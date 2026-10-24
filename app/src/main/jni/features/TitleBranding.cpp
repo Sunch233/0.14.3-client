@@ -1,18 +1,15 @@
 #include "TitleBranding.h"
-#include "InformationContent.h"
-#include "Substrate/CydiaSubstrate.h"
+#include "engine/Engine.h"
+#include "settings/InformationContent.h"
 #include <android/log.h>
 #include <chrono>
 #include <cmath>
-#include <cstdint>
-#include <cstdio>
-#include <cstring>
 #include <dlfcn.h>
 #include <string>
 
-namespace titlebranding {
+namespace features { namespace titlebranding {
 namespace {
-struct Color {float r,g,b,a;};
+using engine::Color;
 using Draw=void(*)(void*,const std::string&,float,float,const Color&,bool);
 Draw originalDraw=nullptr,originalShadow=nullptr;
 int (*lineLength)(void*,const std::string&,float,bool)=nullptr;
@@ -57,27 +54,17 @@ void Render(Draw original,void* font,const std::string& text,float x,float y,con
 }
 void Plain(void* f,const std::string& t,float x,float y,const Color& c,bool flag) {Render(originalDraw,f,t,x,y,c,flag);}
 void Shadow(void* f,const std::string& t,float x,float y,const Color& c,bool flag) {Render(originalShadow,f,t,x,y,c,flag);}
+const engine::Hook hooks[]={
+    {"_ZN4Font4drawERKSsffRK5Colorb",0x34100c,"70b584b00026089c",reinterpret_cast<void*>(Plain),reinterpret_cast<void**>(&originalDraw)},
+    {"_ZN4Font10drawShadowERKSsffRK5Colorb",0x345708,"2de9f04f2ded028b",reinterpret_cast<void*>(Shadow),reinterpret_cast<void**>(&originalShadow)},
+};
 }
 void InstallVerified(void* lib) {
     static_assert(sizeof(void*)==4 && sizeof(std::string)==4,"Verified ARMv7 GNU STL ABI");
-    const char* names[]={"_ZN4Font4drawERKSsffRK5Colorb","_ZN4Font10drawShadowERKSsffRK5Colorb"};
-    const uintptr_t rvas[]={0x34100c,0x345708};
-    const char* signatures[]={"70b584b00026089c","2de9f04f2ded028b"};
-    void* targets[2]{};
-    for(int i=0;i<2;++i) {
-        targets[i]=dlsym(lib,names[i]);
-        const auto address=reinterpret_cast<uintptr_t>(targets[i]);
-        Dl_info image{};
-        unsigned char expected[8];
-        for(int j=0;j<8;++j) {unsigned byte=0;std::sscanf(signatures[i]+j*2,"%2x",&byte);expected[j]=byte;}
-        if(!(address&1) || !dladdr(targets[i],&image) ||
-           (address&~uintptr_t(1))-reinterpret_cast<uintptr_t>(image.dli_fbase)!=rvas[i] ||
-           std::memcmp(reinterpret_cast<void*>(address&~uintptr_t(1)),expected,8)) return;
-    }
     lineLength=reinterpret_cast<decltype(lineLength)>(dlsym(lib,"_ZNK4Font13getLineLengthERKSsfb"));
     if(!lineLength) return;
-    MSHookFunction(targets[0],reinterpret_cast<void*>(Plain),reinterpret_cast<void**>(&originalDraw));
-    MSHookFunction(targets[1],reinterpret_cast<void*>(Shadow),reinterpret_cast<void**>(&originalShadow));
-    __android_log_print(ANDROID_LOG_INFO,"SunchBranding","Title branding installed: version %s",informationcontent::version);
+    if(engine::InstallHooks(lib,hooks,sizeof(hooks)/sizeof(hooks[0])))
+        __android_log_print(ANDROID_LOG_INFO,"SunchBranding","Title branding installed: version %s",informationcontent::version);
 }
 }
+} // namespace features
