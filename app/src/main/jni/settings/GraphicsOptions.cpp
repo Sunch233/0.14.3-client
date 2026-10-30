@@ -5,6 +5,7 @@
 #include "features/UiDebug.h"
 #include "features/TargetInfo.h"
 #include "features/VSync.h"
+#include "features/Win10Ui.h"
 #include "engine/Engine.h"
 #include "InformationContent.h"
 #include <android/log.h>
@@ -25,7 +26,8 @@ Option dynamicLightOption{0,"动态光源"};
 Option blockInfoOption{0,"方块/实体信息显示"};
 Option forceSprintOption{0,"强制疾跑"};
 Option uiDebugOption{0,"UI 调试"};
-bool Custom(const Option* p) {return p==&fpsOption || p==&vsyncOption || p==&blockInfoOption || p==&dynamicLightOption || p==&forceSprintOption || p==&uiDebugOption;}
+Option win10UiOption{0,"Win10 UI"};
+bool Custom(const Option* p) {return p==&fpsOption || p==&vsyncOption || p==&blockInfoOption || p==&dynamicLightOption || p==&forceSprintOption || p==&uiDebugOption || p==&win10UiOption;}
 using PaneList=std::vector<std::shared_ptr<void>>;
 void (*originalGenerate)(void*)=nullptr;
 void (*originalButtons)(void*)=nullptr;
@@ -46,6 +48,8 @@ void (*labelText)(void*,const std::string&)=nullptr;
 constexpr const char* settingsTitle="高级设置";
 constexpr const char* moreTitle="更多功能";
 constexpr const char* informationTitle="关于";
+constexpr const char* debugTitle="调试";
+constexpr unsigned customCategoryCount=2;
 void* (*getFont)(void*)=nullptr;
 void (*drawText)(void*,const std::string&,float,float,const Color&,bool)=nullptr;
 int (*createButton)(void*,int,int,int,int,int,int)=nullptr;
@@ -78,10 +82,10 @@ void ScreenRender(void* screen,int x,int y,float dt) {
     if(At<int>(screen,228)==1) return;
     const auto& panes=At<PaneList>(screen,140);
     const auto& buttons=At<PaneList>(screen,200);
-    if(panes.size()<2 || panes.size()!=buttons.size()) return;
+    if(panes.size()<customCategoryCount || panes.size()!=buttons.size()) return;
     void* font=getFont(At<void*>(screen,20));
     if(!font) return;
-    for(std::size_t i=panes.size()-2;i<panes.size();++i) {
+    for(std::size_t i=panes.size()-customCategoryCount;i<panes.size();++i) {
         const auto& groups=At<PaneList>(panes[i].get(),48);
         if(groups.empty()) continue;
         const auto& title=At<std::string>(groups[0].get(),68);
@@ -97,24 +101,26 @@ void Buttons(void* screen) {
     if(At<int>(screen,228)==1) return;
     auto& buttons=At<PaneList>(screen,200);
     // Append categories in the same order as their panes; vanilla lays them out.
-    for(int i=0;i<2;++i)
+    for(unsigned i=0;i<customCategoryCount;++i)
         createButton(screen,int(buttons.size())+2,At<int>(screen,164),134,28,0,0);
 }
 void Generate(void* screen) {
     originalGenerate(screen);
     auto& panes=At<PaneList>(screen,140);
     const auto& buttons=At<PaneList>(screen,200);
-    if(panes.size()<3 || panes.size()>5 || buttons.size()!=panes.size()+2) return;
+    if(panes.size()<3 || panes.size()>5 || buttons.size()!=panes.size()+customCategoryCount) return;
     void* client=At<void*>(screen,20);
     auto settingsPane=CreatePane();
     void* settingsGroup=AddGroup(settingsPane.get(),settingsTitle);
     addOption(settingsGroup,fpsOption,client);
     addOption(settingsGroup,vsyncOption,client);
+    addOption(settingsGroup,win10UiOption,client);
     void* moreGroup=AddGroup(settingsPane.get(),moreTitle);
     addOption(moreGroup,blockInfoOption,client);
     addOption(moreGroup,dynamicLightOption,client);
     addOption(moreGroup,forceSprintOption,client);
-    addOption(moreGroup,uiDebugOption,client);
+    void* debugGroup=AddGroup(settingsPane.get(),debugTitle);
+    addOption(debugGroup,uiDebugOption,client);
     panes.push_back(std::move(settingsPane));
 
     auto informationPane=CreatePane();
@@ -123,6 +129,7 @@ void Generate(void* screen) {
     void* credits=AddGroup(informationPane.get(),"更新记录");
     for(const char* line:informationcontent::credits) AddLabel(credits,client,line);
     panes.push_back(std::move(informationPane));
+
 }
 bool Boolean(void* self,const Option* p) {
     if(p==&fpsOption) return graphicssettings::Get().showFps;
@@ -131,9 +138,11 @@ bool Boolean(void* self,const Option* p) {
     if(p==&dynamicLightOption) return graphicssettings::Get().dynamicLight;
     if(p==&forceSprintOption) return graphicssettings::Get().forceSprint;
     if(p==&uiDebugOption) return graphicssettings::Get().uiDebug;
+    if(p==&win10UiOption) return graphicssettings::Get().win10Ui;
     return originalBoolean(self,p);
 }
 bool CanModify(void* self,const Option* p) {
+    if(p==&win10UiOption) return features::win10ui::Available();
     if(p==&uiDebugOption) return features::uidebug::Available();
     if(p==&forceSprintOption) return features::forcesprint::Available();
     if(p==&dynamicLightOption) return features::dynamiclight::Available();
@@ -148,6 +157,7 @@ void Toggle(void* self,const Option* p,int direction) {
     if(p==&dynamicLightOption) {graphicssettings::SetDynamicLight(!graphicssettings::Get().dynamicLight);return;}
     if(p==&forceSprintOption) {graphicssettings::SetForceSprint(!graphicssettings::Get().forceSprint);return;}
     if(p==&uiDebugOption) {graphicssettings::SetUiDebug(!graphicssettings::Get().uiDebug);return;}
+    if(p==&win10UiOption) {features::win10ui::SetEnabled(!graphicssettings::Get().win10Ui);return;}
     originalToggle(self,p,direction);
 }
 void ItemRender(void* item,void* client,int x,int y) {
