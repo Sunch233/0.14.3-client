@@ -93,7 +93,7 @@ void Report(const char* kind,const std::string& resource,const char* function,
     report+="Resource: ";report+=resource.empty()?"[no filename supplied by engine]":resource;
     report+="\nFunction: ";report+=function;
     report+="\nEngine source: ";report+=engineLocation;
-    report+="\nEngine SHA256: ef26c33fc8a1f554ab3e4ed0bf39bd656f376f73706f52f9a3e6bd21989ef402\n\n";
+    report+="\nEngine SHA256: ";report+=engine::binarySha256;report+="\n\n";
     report+=details;
     report+="\n\nNative stack (module-relative PCs; engine C++ source lines unavailable without debug symbols):\n";
     report+=trace.text;
@@ -213,7 +213,25 @@ std::string Pending() {
     // Only hand Java one of our fixed filenames; do not consume on read.
     for(unsigned i=0;i<slotCount;++i) {
         char expected[32];::snprintf(expected,sizeof(expected),"error-%02u.txt",i);
-        if(name==expected) return directory+"/"+receipt;
+        if(name==expected) {
+            // Older versions surfaced every unused template's missing parent
+            // during loading. Keep the saved report, but retire that obsolete
+            // notification so installing this fix does not show it again.
+            FILE* saved=std::fopen((directory+"/"+name).c_str(),"rb");
+            if(saved) {
+                char header[4097]{};
+                const auto count=std::fread(header,1,sizeof(header)-1,saved);
+                std::fclose(saved);
+                const std::string contents(header,count);
+                if(contents.find("\nType: JSON UI parameters\n")!=std::string::npos &&
+                   contents.find("\nFunction: UIDefRepository::_resolveReferences [RVA 0x34fca0]\n")!=std::string::npos &&
+                   contents.find("\nControl: [definition loading]\n")!=std::string::npos) {
+                    std::remove((directory+"/pending.txt").c_str());
+                    return {};
+                }
+            }
+            return directory+"/"+receipt;
+        }
     }
     return {};
 }

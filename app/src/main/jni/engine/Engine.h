@@ -25,6 +25,8 @@ struct Hook {
     bool byRva=false;
 };
 
+// Shared identity for binary verification and diagnostic report metadata.
+constexpr const char* binarySha256="b854edd48d8cc02fbd2e1f0974842fb0f8519b0afff6460af12b9cb48cf59029";
 bool Sha256File(const char* path,std::string& digest);
 // Must succeed before resolving feature or settings UI object layouts.
 bool VerifyBinary(void* library);

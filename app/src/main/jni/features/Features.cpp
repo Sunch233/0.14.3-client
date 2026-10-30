@@ -7,12 +7,14 @@
 #include "TargetInfo.h"
 #include "TitleBranding.h"
 #include "UiDiagnostics.h"
+#include "UiDebug.h"
 #include "VSync.h"
 
 namespace features {
 void InstallVerified(void* lib) {
     errorreports::InstallVerified(lib);
     uidiagnostics::InstallVerified(lib);
+    uidebug::InstallVerified(lib);
     mouseinput::InstallVerified(lib);
     forcesprint::InstallVerified(lib);
     vsync::Initialize(lib);

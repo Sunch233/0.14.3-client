@@ -30,7 +30,6 @@ double (*jsonDouble)(Value,double)=nullptr;
 std::vector<std::string> (*jsonNames)(Value)=nullptr;
 std::string (*jsonDump)(Value)=nullptr;
 void (*originalLoad)(void*,const std::string&,Loader)=nullptr;
-int (*originalCollect)(void*,const std::string&,void*,Loader)=nullptr;
 bool (*originalParse)(void*,const std::string&,void*,bool)=nullptr;
 Value (*originalFind)(Value,const std::string&,const std::string&)=nullptr;
 Value (*originalValue)(Value,const std::string&)=nullptr;
@@ -142,30 +141,34 @@ void Remember(Value root,const std::string& file) {
         definitions[DefKey(space,local)]={{file,"/"+name},parent.empty()?std::string():RefKey(space,parent),std::move(fields)};
     }
 }
-void CheckInheritance() {
+void CheckInheritance(Value repository,const std::string& requested) {
     std::lock_guard<std::recursive_mutex> lock(metadataMutex);
-    for(const auto& entry:definitions) {
-        const auto& definition=entry.second;
+    std::set<std::string> seen;
+    std::string current=requested;
+    std::string requestedName=requested;std::replace(requestedName.begin(),requestedName.end(),'\n','.');
+    while(!current.empty()) {
+        const auto entry=definitions.find(current);
+        if(entry==definitions.end()) break;
+        const auto& definition=entry->second;
+        if(!seen.insert(current).second) {
+            Error(definition.origin,"UIResolvedDef::create / inheritance resolution [RVA 0x3364a4]","inheritance",
+                "acyclic definition references",nullptr,"Cyclic inheritance while creating: "+requestedName);
+            break;
+        }
         // Variable-containing references need the runtime variable stack.
-        if(definition.parent.empty() || definition.parent.find('$')!=std::string::npos) continue;
+        if(definition.parent.empty() || definition.parent.find('$')!=std::string::npos) break;
         if(!definitions.count(definition.parent)) {
+            const auto separator=definition.parent.find('\n');
+            // Code may register definitions outside the tracked asset loader.
+            // Metadata absence alone does not prove a runtime lookup failed.
+            if(separator!=std::string::npos && Type(originalFind(repository,
+                    definition.parent.substr(0,separator),definition.parent.substr(separator+1)))!=0) break;
             std::string target=definition.parent;std::replace(target.begin(),target.end(),'\n','.');
-            Error(definition.origin,"UIDefRepository::_resolveReferences [RVA 0x34fca0]","inheritance",
-                "existing namespace.definition",nullptr,"Unresolved reference: "+target);
-            continue;
+            Error(definition.origin,"UIResolvedDef::create / inheritance resolution [RVA 0x3364a4]","inheritance",
+                "existing namespace.definition",nullptr,"Unresolved reference: "+target+"\nRequested definition: "+requestedName);
+            break;
         }
-        std::set<std::string> seen;
-        std::string current=entry.first;
-        while(!current.empty()) {
-            if(!seen.insert(current).second) {
-                Error(definition.origin,"UIDefRepository::_resolveReferences [RVA 0x34fca0]","inheritance",
-                    "acyclic definition references",nullptr,"Cyclic inheritance detected");
-                break;
-            }
-            const auto next=definitions.find(current);
-            if(next==definitions.end()) break;
-            current=next->second.parent;
-        }
+        current=definition.parent;
     }
 }
 void Load(void* self,const std::string& list,Loader loader) {
@@ -180,13 +183,6 @@ void Load(void* self,const std::string& list,Loader loader) {
     };
     originalLoad(self,list,std::move(tracked));
 }
-int Collect(void* self,const std::string& list,void* entries,Loader loader) {
-    const int result=originalCollect(self,list,entries,std::move(loader));
-    // All files are known now; report bad inheritance before the engine starts
-    // resolving and merging definitions.
-    if(loading) {Scope<bool> guard(inspecting,true);CheckInheritance();}
-    return result;
-}
 bool Parse(void* reader,const std::string& text,void* root,bool comments) {
     const bool success=originalParse(reader,text,root,comments);
     if(success && loading) {Scope<bool> guard(inspecting,true);Remember(root,loading->file);}
@@ -197,6 +193,10 @@ Value Find(Value self,const std::string& space,const std::string& name) {
     Value result=originalFind(self,space,name);
     if(inspecting) return result;
     Scope<bool> guard(inspecting,true);
+    const bool creating=caller>=0x3364a4 && caller<0x336874;
+    // Loading indexes every template, including optional platform screens.
+    // Only follow inheritance once the engine actually creates a definition.
+    if(creating && Type(result)!=0) CheckInheritance(self,DefKey(space,name));
     {
         std::lock_guard<std::recursive_mutex> lock(metadataMutex);
         const auto it=definitions.find(DefKey(space,name));
@@ -217,7 +217,7 @@ Value Find(Value self,const std::string& space,const std::string& name) {
         }
     }
     // Other callers may legitimately probe for an optional definition.
-    if(Type(result)==0 && caller>=0x3364a4 && caller<0x336874) {
+    if(Type(result)==0 && creating) {
         Origin origin=control?control->origin:Origin{};
         Error(origin,"UIResolvedDef::create / UIDefRepository::findDef [RVA 0x2e4c2c]","reference",
             "existing namespace.definition",nullptr,"Unresolved reference: "+space+"."+name);
@@ -424,7 +424,6 @@ std::shared_ptr<void> FindControl(std::shared_ptr<void>& root,std::string name) 
 }
 const engine::Hook hooks[]={
     {"_ZN15UIDefRepository12loadDefsListERKSsSt8functionIFSsS1_EE",0x352278,"2de9f04f8fb07f4e",reinterpret_cast<void*>(Load),reinterpret_cast<void**>(&originalLoad)},
-    {"_ZN15UIDefRepository21_collectAllDefEntriesERKSsRSt6vectorINS_8DefEntryESaIS3_EESt8functionIFSsS1_EE",0x351ee0,"2de9f04f98469b68",reinterpret_cast<void*>(Collect),reinterpret_cast<void**>(&originalCollect)},
     {"_ZN4Json6Reader5parseERKSsRNS_5ValueEb",0x3519f8,"70b5044682b05030",reinterpret_cast<void*>(Parse),reinterpret_cast<void**>(&originalParse)},
     {"_ZNK15UIDefRepository7findDefERKSsS1_",0x2e4c2c,"2de9f84f04460868",reinterpret_cast<void*>(Find),reinterpret_cast<void**>(&originalFind)},
     {"_ZNK13UIResolvedDef8getValueERKSs",0x2e5294,"037870b504460d46",reinterpret_cast<void*>(GetValue),reinterpret_cast<void**>(&originalValue)},

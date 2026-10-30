@@ -2,6 +2,7 @@
 #include "GraphicsOptions.h"
 #include "features/DynamicLight.h"
 #include "features/ForceSprint.h"
+#include "features/UiDebug.h"
 #include "features/TargetInfo.h"
 #include "features/VSync.h"
 #include "engine/Engine.h"
@@ -23,7 +24,8 @@ Option vsyncOption{0,"垂直同步"};
 Option dynamicLightOption{0,"动态光源"};
 Option blockInfoOption{0,"方块/实体信息显示"};
 Option forceSprintOption{0,"强制疾跑"};
-bool Custom(const Option* p) {return p==&fpsOption || p==&vsyncOption || p==&blockInfoOption || p==&dynamicLightOption || p==&forceSprintOption;}
+Option uiDebugOption{0,"UI 调试"};
+bool Custom(const Option* p) {return p==&fpsOption || p==&vsyncOption || p==&blockInfoOption || p==&dynamicLightOption || p==&forceSprintOption || p==&uiDebugOption;}
 using PaneList=std::vector<std::shared_ptr<void>>;
 void (*originalGenerate)(void*)=nullptr;
 void (*originalButtons)(void*)=nullptr;
@@ -112,6 +114,7 @@ void Generate(void* screen) {
     addOption(moreGroup,blockInfoOption,client);
     addOption(moreGroup,dynamicLightOption,client);
     addOption(moreGroup,forceSprintOption,client);
+    addOption(moreGroup,uiDebugOption,client);
     panes.push_back(std::move(settingsPane));
 
     auto informationPane=CreatePane();
@@ -127,9 +130,11 @@ bool Boolean(void* self,const Option* p) {
     if(p==&blockInfoOption) return graphicssettings::Get().blockInfo;
     if(p==&dynamicLightOption) return graphicssettings::Get().dynamicLight;
     if(p==&forceSprintOption) return graphicssettings::Get().forceSprint;
+    if(p==&uiDebugOption) return graphicssettings::Get().uiDebug;
     return originalBoolean(self,p);
 }
 bool CanModify(void* self,const Option* p) {
+    if(p==&uiDebugOption) return features::uidebug::Available();
     if(p==&forceSprintOption) return features::forcesprint::Available();
     if(p==&dynamicLightOption) return features::dynamiclight::Available();
     if(p==&vsyncOption) return features::vsync::Available();
@@ -142,6 +147,7 @@ void Toggle(void* self,const Option* p,int direction) {
     if(p==&blockInfoOption) {graphicssettings::SetBlockInfo(!graphicssettings::Get().blockInfo);return;}
     if(p==&dynamicLightOption) {graphicssettings::SetDynamicLight(!graphicssettings::Get().dynamicLight);return;}
     if(p==&forceSprintOption) {graphicssettings::SetForceSprint(!graphicssettings::Get().forceSprint);return;}
+    if(p==&uiDebugOption) {graphicssettings::SetUiDebug(!graphicssettings::Get().uiDebug);return;}
     originalToggle(self,p,direction);
 }
 void ItemRender(void* item,void* client,int x,int y) {

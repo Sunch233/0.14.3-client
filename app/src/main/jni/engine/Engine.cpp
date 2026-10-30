@@ -13,7 +13,7 @@ bool VerifyBinary(void* lib) {
     if(!anchor || !dladdr(anchor,&image)) return false;
     std::string hash;
     if(!image.dli_fname || !Sha256File(image.dli_fname,hash) ||
-       hash!="ef26c33fc8a1f554ab3e4ed0bf39bd656f376f73706f52f9a3e6bd21989ef402") {
+       hash!=binarySha256) {
         __android_log_print(ANDROID_LOG_ERROR,"SunchEngine","Unsupported engine binary");
         return false;
     }

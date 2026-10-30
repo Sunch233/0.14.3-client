@@ -42,6 +42,7 @@ LOCAL_SRC_FILES := main.cpp \
     features/Features.cpp \
     features/ErrorReports.cpp \
     features/UiDiagnostics.cpp \
+    features/UiDebug.cpp \
     features/MouseInput.cpp \
     features/ForceSprint.cpp \
     features/Hud.cpp \
