@@ -21,6 +21,8 @@ struct Hook {
     const char* prefix;
     void* replace;
     void** original;
+    // For verified internal callbacks without an exported symbol.
+    bool byRva=false;
 };
 
 bool Sha256File(const char* path,std::string& digest);

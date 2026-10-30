@@ -40,6 +40,7 @@ import com.mojang.android.StringValue;
 import com.mojang.minecraftpe.input.InputDeviceManager;
 import com.mojang.minecraftpe.platforms.Platform;
 import com.mcpe.sunch.client0143.Main;
+import com.mcpe.sunch.client0143.MouseInput;
 
 import org.fmod.FMOD;
 import org.json.JSONException;
@@ -65,6 +66,7 @@ public class MainActivity extends NativeActivity implements View.OnKeyListener {
     static final String TAG = "Start Java";
     private Bundle data;
     private InputDeviceManager deviceManager;
+    private MouseInput mouseInput;
     HeadsetConnectionReceiver headsetConnectionReceiver;
     private AlertDialog mDialog;
     PopupWindow mHiddenTextInputDialog;
@@ -531,6 +533,7 @@ public class MainActivity extends NativeActivity implements View.OnKeyListener {
         nativeRegisterThis();
         FMOD.init(this);
         this.deviceManager = InputDeviceManager.create(this);
+        this.mouseInput = new MouseInput(this);
         this.platform.onAppStart(getWindow().getDecorView());
         this.headsetConnectionReceiver = new HeadsetConnectionReceiver();
         nativeSetHeadphonesConnected(((AudioManager) getSystemService(Context.AUDIO_SERVICE)).isWiredHeadsetOn());
@@ -540,6 +543,7 @@ public class MainActivity extends NativeActivity implements View.OnKeyListener {
 
     @Override // android.app.NativeActivity, android.app.Activity
     protected void onDestroy() {
+        if (mouseInput != null) mouseInput.pause();
         mInstance = null;
         System.out.println("onDestroy");
         FMOD.close();
@@ -582,6 +586,7 @@ public class MainActivity extends NativeActivity implements View.OnKeyListener {
 
     @Override // android.app.NativeActivity, android.app.Activity
     protected void onPause() {
+        if (mouseInput != null) mouseInput.pause();
         nativeSuspend();
         super.onPause();
     }
@@ -589,6 +594,7 @@ public class MainActivity extends NativeActivity implements View.OnKeyListener {
     @Override // android.app.NativeActivity, android.app.Activity
     protected void onResume() {
         super.onResume();
+        if (mouseInput != null) mouseInput.resume();
         registerReceiver(this.headsetConnectionReceiver, new IntentFilter("android.intent.action.HEADSET_PLUG"));
         if (this.mHiddenTextInputDialog != null) {
             String obj = this.textInputWidget.getText().toString();
@@ -623,20 +629,7 @@ public class MainActivity extends NativeActivity implements View.OnKeyListener {
     public void onWindowFocusChanged(boolean z) {
         super.onWindowFocusChanged(z);
         this.platform.onViewFocusChanged(z);
-        if (z){
-//            View decorView = getWindow().getDecorView();
-//            decorView.postDelayed(() -> {
-//                try {
-//                    if (hasWindowFocus()) {
-//                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-//                            decorView.requestPointerCapture();
-//                        }
-//                    }
-//                } catch (Exception e) {
-//                    e.printStackTrace();
-//                }
-//            }, 300);
-        }
+        if (mouseInput != null) mouseInput.onWindowFocusChanged(z);
 
     }
 

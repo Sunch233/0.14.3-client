@@ -21,10 +21,15 @@ bool VerifyBinary(void* lib) {
 }
 
 bool InstallHooks(void* lib,const Hook* hooks,std::size_t count) {
+    Dl_info engineImage{};
+    void* anchor=dlsym(lib,"_ZN12GameRenderer6renderEf");
+    if(!anchor || !dladdr(anchor,&engineImage)) return false;
     std::vector<void*> targets(count);
     for(std::size_t i=0;i<count;++i) {
         const auto& hook=hooks[i];
-        targets[i]=dlsym(lib,hook.name);
+        targets[i]=hook.byRva
+            ?reinterpret_cast<void*>((reinterpret_cast<uintptr_t>(engineImage.dli_fbase)+hook.rva)|1u)
+            :dlsym(lib,hook.name);
         const uintptr_t address=reinterpret_cast<uintptr_t>(targets[i]);
         Dl_info image{};
         unsigned char expected[8];

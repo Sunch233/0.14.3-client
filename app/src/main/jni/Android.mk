@@ -40,6 +40,7 @@ LOCAL_SRC_FILES := main.cpp \
 	xhook/xhook.c \
     settings/GraphicsOptions.cpp \
     features/Features.cpp \
+    features/MouseInput.cpp \
     features/Hud.cpp \
     features/FpsCounter.cpp \
     features/TargetInfo.cpp \
