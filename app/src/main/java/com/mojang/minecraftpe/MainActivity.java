@@ -41,6 +41,7 @@ import com.mojang.minecraftpe.input.InputDeviceManager;
 import com.mojang.minecraftpe.platforms.Platform;
 import com.mcpe.sunch.client0143.Main;
 import com.mcpe.sunch.client0143.MouseInput;
+import com.mcpe.sunch.client0143.ErrorReports;
 
 import org.fmod.FMOD;
 import org.json.JSONException;
@@ -67,6 +68,7 @@ public class MainActivity extends NativeActivity implements View.OnKeyListener {
     private Bundle data;
     private InputDeviceManager deviceManager;
     private MouseInput mouseInput;
+    private ErrorReports errorReports;
     HeadsetConnectionReceiver headsetConnectionReceiver;
     private AlertDialog mDialog;
     PopupWindow mHiddenTextInputDialog;
@@ -489,6 +491,7 @@ public class MainActivity extends NativeActivity implements View.OnKeyListener {
     @SuppressLint("Range")
     protected void onActivityResult(int i, int i2, Intent intent) {
         super.onActivityResult(i, i2, intent);
+        if (errorReports != null && errorReports.onActivityResult(i, i2, intent)) return;
         for (ActivityListener activityListener : this.mActivityListeners) {
             activityListener.onActivityResult(i, i2, intent);
         }
@@ -521,12 +524,14 @@ public class MainActivity extends NativeActivity implements View.OnKeyListener {
 
     @Override // android.app.NativeActivity, android.app.Activity
     public void onCreate(Bundle bundle) {
-        super.onCreate(bundle);
         try {
             nativeConfigureGraphics(new File(getFilesDir(), "advanced-graphics.cfg").getAbsolutePath());
+            ErrorReports.configure(this);
         } catch (UnsatisfiedLinkError error) {
             Log.w(TAG, "Native graphics settings unavailable", error);
         }
+        super.onCreate(bundle);
+        this.errorReports = new ErrorReports(this);
         Main.main(this);
         this.platform = Platform.createPlatform(true);
         setVolumeControlStream(3);
@@ -543,6 +548,7 @@ public class MainActivity extends NativeActivity implements View.OnKeyListener {
 
     @Override // android.app.NativeActivity, android.app.Activity
     protected void onDestroy() {
+        if (errorReports != null) errorReports.destroy();
         if (mouseInput != null) mouseInput.pause();
         mInstance = null;
         System.out.println("onDestroy");
@@ -586,6 +592,7 @@ public class MainActivity extends NativeActivity implements View.OnKeyListener {
 
     @Override // android.app.NativeActivity, android.app.Activity
     protected void onPause() {
+        if (errorReports != null) errorReports.pause();
         if (mouseInput != null) mouseInput.pause();
         nativeSuspend();
         super.onPause();
@@ -594,6 +601,7 @@ public class MainActivity extends NativeActivity implements View.OnKeyListener {
     @Override // android.app.NativeActivity, android.app.Activity
     protected void onResume() {
         super.onResume();
+        if (errorReports != null) errorReports.resume();
         if (mouseInput != null) mouseInput.resume();
         registerReceiver(this.headsetConnectionReceiver, new IntentFilter("android.intent.action.HEADSET_PLUG"));
         if (this.mHiddenTextInputDialog != null) {

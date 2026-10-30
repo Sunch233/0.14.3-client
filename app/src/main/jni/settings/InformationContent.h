@@ -1,16 +1,16 @@
 #pragma once
 
 namespace informationcontent {
-constexpr const char* version = "1.1.0";
+constexpr const char* version = "1.1.1";
 constexpr const char* updates[] = {
     "MCPE0.14 Sunch Client",
     "作者Sunch233 QQ2125696621",
     "更新QQ群 649857110",
-    "感谢: ",
-    "皓月当空 提供的native mod底包",
+    "感谢「皓月当空」提供的native mod底包",
     "",
 };
 constexpr const char* credits[] = {
+    "1.1.1: - 实现了 glsl着色器 / JsonUI 错误处理",
     "1.1.0: ",
     " - 兼容了鼠标输入",
     " - 实现了强制疾跑",
