@@ -41,6 +41,7 @@ LOCAL_SRC_FILES := main.cpp \
     settings/GraphicsOptions.cpp \
     features/Features.cpp \
     features/MouseInput.cpp \
+    features/ForceSprint.cpp \
     features/Hud.cpp \
     features/FpsCounter.cpp \
     features/TargetInfo.cpp \
