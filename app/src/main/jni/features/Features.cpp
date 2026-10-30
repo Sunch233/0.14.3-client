@@ -9,6 +9,7 @@
 #include "UiDiagnostics.h"
 #include "UiDebug.h"
 #include "VSync.h"
+#include "ViewDistance.h"
 #include "Win10Ui.h"
 
 namespace features {
@@ -17,6 +18,7 @@ void InstallVerified(void* lib) {
     uidiagnostics::InstallVerified(lib);
     uidebug::InstallVerified(lib);
     win10ui::InstallVerified(lib);
+    viewdistance::InstallVerified(lib);
     mouseinput::InstallVerified(lib);
     forcesprint::InstallVerified(lib);
     vsync::Initialize(lib);

@@ -5,6 +5,7 @@
 #include "features/UiDebug.h"
 #include "features/TargetInfo.h"
 #include "features/VSync.h"
+#include "features/ViewDistance.h"
 #include "features/Win10Ui.h"
 #include "engine/Engine.h"
 #include "InformationContent.h"
@@ -35,6 +36,9 @@ void (*originalScreenRender)(void*,int,int,float)=nullptr;
 bool (*originalBoolean)(void*,const Option*)=nullptr;
 bool (*originalCanModify)(void*,const Option*)=nullptr;
 void (*originalToggle)(void*,const Option*,int)=nullptr;
+int (*originalStepSlider)(void*,const Option*,void*)=nullptr;
+int (*createProgressSlider)(void*,const Option*,void*)=nullptr;
+std::string (*translate)(const std::string&)=nullptr;
 void (*paneConstructor)(void*)=nullptr;
 void (*containerConstructor)(void*,bool,bool,int,int,int,int)=nullptr;
 void* groupVtable=nullptr;
@@ -142,6 +146,7 @@ bool Boolean(void* self,const Option* p) {
     return originalBoolean(self,p);
 }
 bool CanModify(void* self,const Option* p) {
+    if(features::viewdistance::IsUnlockedOption(p)) return true;
     if(p==&win10UiOption) return features::win10ui::Available();
     if(p==&uiDebugOption) return features::uidebug::Available();
     if(p==&forceSprintOption) return features::forcesprint::Available();
@@ -160,17 +165,24 @@ void Toggle(void* self,const Option* p,int direction) {
     if(p==&win10UiOption) {features::win10ui::SetEnabled(!graphicssettings::Get().win10Ui);return;}
     originalToggle(self,p,direction);
 }
+int StepSlider(void* group,const Option* option,void* client) {
+    if(features::viewdistance::IsUnlockedOption(option)) return createProgressSlider(group,option,client);
+    return originalStepSlider(group,option,client);
+}
 void ItemRender(void* item,void* client,int x,int y) {
     const Option* option=At<const Option*>(item,68);
-    if(!Custom(option)) {originalItemRender(item,client,x,y);return;}
+    const bool distance=features::viewdistance::IsUnlockedOption(option);
+    if(!Custom(option) && !distance) {originalItemRender(item,client,x,y);return;}
     Color color=isSelected(item)?Color{1.f,1.f,.627f,1.f}:Color{.733f,.733f,.733f,1.f};
     if(isLocked(item)) {color.r*=.5f;color.g*=.5f;color.b*=.5f;color.a=.75f;}
-    drawText(getFont(client),option->key,
+    const std::string label=distance?translate(option->key)+"："+engine::Number(features::viewdistance::GetChunks(client))+" 区块":option->key;
+    drawText(getFont(client),label,
         float(At<int>(item,8)),float(At<int>(item,12)+(At<int>(item,20)-8)/2),color,false);
     containerRender(item,client,x,y);
 }
 #define O(name,rva,prefix,fn,original) {name,rva,prefix,reinterpret_cast<void*>(fn),reinterpret_cast<void**>(&original)}
 const engine::Hook hooks[]={
+    O("_ZN12OptionsGroup16createStepSliderERKN7Options6OptionER15MinecraftClient",0x336a20,"2de9f04105468ab0",StepSlider,originalStepSlider),
     O("_ZN11OptionsItem6renderEP15MinecraftClientii",0x3466bc,"2de9f04f2ded028b",ItemRender,originalItemRender),
     O("_ZN13OptionsScreen29_generateOptionScreensDefaultEv",0x3f0c44,"2de9f04f95b00446",Generate,originalGenerate),
     O("_ZN13OptionsScreen21createCategoryButtonsEv",0x3efeb0,"2de9f04104468eb0",Buttons,originalButtons),
@@ -196,6 +208,8 @@ void InstallVerified(void* lib) {
     S("_ZNK15MinecraftClient7getFontEv",getFont);
     S("_ZN4Font10drawShadowERKSsffRK5Colorb",drawText);
     S("_ZN13OptionsScreen20createCategoryButtonEiiiiii",createButton);
+    S("_ZN12OptionsGroup20createProgressSliderERKN7Options6OptionER15MinecraftClient",createProgressSlider);
+    S("_ZN4I18n3getERKSs",translate);
 #undef S
     if(!ok) return;
     if(engine::InstallHooks(lib,hooks,sizeof(hooks)/sizeof(hooks[0])))

@@ -1,7 +1,7 @@
 #pragma once
 
 namespace informationcontent {
-constexpr const char* version = "1.1.3";
+constexpr const char* version = "1.2.0 测试";
 constexpr const char* updates[] = {
     "MCPE0.14 Sunch Client",
     "作者Sunch233 QQ2125696621",
@@ -10,6 +10,8 @@ constexpr const char* updates[] = {
     "",
 };
 constexpr const char* credits[] = {
+    "1.2.0: ",
+    " - 最大视距提升到32并且可自由选择",
     "1.1.3: - 新增Win10 UI 切换",
     "1.1.2: - 新增JsonUI 布局调试功能",
     "1.1.1: - 实现了 glsl着色器 / JsonUI 错误处理",

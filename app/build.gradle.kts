@@ -14,7 +14,7 @@ android {
         applicationId = "com.mcpe.sunch.client0143"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1130
+        versionCode = 1131
         versionName = "1.1.3"
         externalNativeBuild {
             ndkBuild {

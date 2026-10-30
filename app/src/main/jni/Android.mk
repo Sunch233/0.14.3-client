@@ -44,6 +44,7 @@ LOCAL_SRC_FILES := main.cpp \
     features/UiDiagnostics.cpp \
     features/UiDebug.cpp \
     features/Win10Ui.cpp \
+    features/ViewDistance.cpp \
     features/MouseInput.cpp \
     features/ForceSprint.cpp \
     features/Hud.cpp \
