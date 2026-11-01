@@ -2,6 +2,7 @@
 #include "FpsCounter.h"
 #include "TargetInfo.h"
 #include "VSync.h"
+#include "TitleBranding.h"
 #include "engine/Engine.h"
 #include "settings/GraphicsSettings.h"
 #include <android/log.h>
@@ -22,6 +23,9 @@ void Frame(void* self,float dt) {
     targetInfoEnabled=settings.blockInfo;
     fpscounter::BeginFrame(settings.showFps);
     originalFrame(self,dt);
+    // Runs after all native screens, including menus and loading screens; the
+    // development marker therefore remains visible when the HUD is hidden.
+    titlebranding::RenderDevelopmentOverlay(engine::At<void*>(self,4));
 }
 void HudRender(void* self,void* client,void* control,int pass) {
     originalHudRender(self,client,control,pass);

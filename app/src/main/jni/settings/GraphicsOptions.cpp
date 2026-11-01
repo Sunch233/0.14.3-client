@@ -10,6 +10,7 @@
 #include "engine/Engine.h"
 #include "InformationContent.h"
 #include <android/log.h>
+#include <cmath>
 #include <dlfcn.h>
 #include <memory>
 #include <vector>
@@ -57,6 +58,12 @@ constexpr unsigned customCategoryCount=2;
 void* (*getFont)(void*)=nullptr;
 void (*drawText)(void*,const std::string&,float,float,const Color&,bool)=nullptr;
 int (*createButton)(void*,int,int,int,int,int,int)=nullptr;
+const Option* sensitivityOption=nullptr;
+const Option* fieldOfViewOption=nullptr;
+const Option* gammaOption=nullptr;
+const Option* buttonSizeOption=nullptr;
+void* (*getOptions)(void*)=nullptr;
+float (*getProgressValue)(void*,const Option*)=nullptr;
 void DeleteElement(void* p) {auto vt=*static_cast<void***>(p);reinterpret_cast<void(*)(void*)>(vt[1])(p);}
 void AddLabel(void* group,void* client,const std::string& text) {
     void* raw=::operator new(0x58);
@@ -172,10 +179,30 @@ int StepSlider(void* group,const Option* option,void* client) {
 void ItemRender(void* item,void* client,int x,int y) {
     const Option* option=At<const Option*>(item,68);
     const bool distance=features::viewdistance::IsUnlockedOption(option);
-    if(!Custom(option) && !distance) {originalItemRender(item,client,x,y);return;}
+    const bool numeric=option && (option==sensitivityOption || option==fieldOfViewOption || option==gammaOption || option==buttonSizeOption);
+    if(!Custom(option) && !distance && !numeric) {originalItemRender(item,client,x,y);return;}
+    void* options=numeric?getOptions(client):nullptr;
+    if(numeric && !options) {originalItemRender(item,client,x,y);return;}
     Color color=isSelected(item)?Color{1.f,1.f,.627f,1.f}:Color{.733f,.733f,.733f,1.f};
     if(isLocked(item)) {color.r*=.5f;color.g*=.5f;color.b*=.5f;color.a=.75f;}
-    const std::string label=distance?translate(option->key)+"："+engine::Number(features::viewdistance::GetChunks(client))+" 区块":option->key;
+    std::string label=option->key;
+    if(distance) label=translate(option->key)+"："+engine::Number(features::viewdistance::GetChunks(client))+" 区块";
+    else if(numeric) {
+        // FOV is stored in degrees; the remaining native sliders use 0..1.
+        // Read each render so dragging the existing sliders updates labels live.
+        float value=getProgressValue(options,option);
+        if(!std::isfinite(value)) {originalItemRender(item,client,x,y);return;}
+        label=translate(option->key)+"：";
+        if(option==fieldOfViewOption) {
+            if(value<30.f) value=30.f;
+            if(value>110.f) value=110.f;
+            label+=engine::Number(int(value+.5f))+"°";
+        } else {
+            if(value<0.f) value=0.f;
+            if(value>1.f) value=1.f;
+            label+=engine::Number(int(value*100.f+.5f))+"%";
+        }
+    }
     drawText(getFont(client),label,
         float(At<int>(item,8)),float(At<int>(item,12)+(At<int>(item,20)-8)/2),color,false);
     containerRender(item,client,x,y);
@@ -210,6 +237,12 @@ void InstallVerified(void* lib) {
     S("_ZN13OptionsScreen20createCategoryButtonEiiiiii",createButton);
     S("_ZN12OptionsGroup20createProgressSliderERKN7Options6OptionER15MinecraftClient",createProgressSlider);
     S("_ZN4I18n3getERKSs",translate);
+    S("_ZN7Options6Option11SENSITIVITYE",sensitivityOption);
+    S("_ZN7Options6Option13FIELD_OF_VIEWE",fieldOfViewOption);
+    S("_ZN7Options6Option5GAMMAE",gammaOption);
+    S("_ZN7Options6Option10DPAD_SCALEE",buttonSizeOption);
+    S("_ZN15MinecraftClient10getOptionsEv",getOptions);
+    S("_ZN7Options16getProgressValueEPKNS_6OptionE",getProgressValue);
 #undef S
     if(!ok) return;
     if(engine::InstallHooks(lib,hooks,sizeof(hooks)/sizeof(hooks[0])))

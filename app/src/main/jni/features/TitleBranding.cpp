@@ -13,6 +13,10 @@ using engine::Color;
 using Draw=void(*)(void*,const std::string&,float,float,const Color&,bool);
 Draw originalDraw=nullptr,originalShadow=nullptr;
 int (*lineLength)(void*,const std::string&,float,bool)=nullptr;
+void* (*getFont)(void*)=nullptr;
+void* (*getGuiData)(void*)=nullptr;
+int (*screenWidth)(void*)=nullptr;
+bool overlayAvailable=false;
 thread_local bool insideDraw=false;
 Color Rainbow(float hue,float alpha) {
     const float h=(hue-std::floor(hue)) * 6.f;
@@ -32,15 +36,20 @@ void DrawBranding(void* font,float x,float copyrightY,float alpha,bool flag) {
     static const std::string label=std::string("Sunch Client ")+informationcontent::version;
     const double seconds=std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
     const float phase=float(std::fmod(seconds,5.0)/5.0);
-    std::string prefix;
+    std::size_t glyphCount=0,glyphIndex=0;
+    for(unsigned char byte:label) if((byte&0xc0)!=0x80) ++glyphCount;
+    float advance=0.f;
     for(std::size_t offset=0;offset<label.size();) {
         std::size_t next=offset+1;
         while(next<label.size() && (static_cast<unsigned char>(label[next])&0xc0)==0x80) ++next;
         const std::string glyph=label.substr(offset,next-offset);
-        const float advance=float(lineLength(font,prefix,1.f,false));
-        const Color tint=Rainbow(phase+.75f*float(offset)/float(label.size()),alpha);
+        const Color tint=Rainbow(phase+.75f*float(glyphIndex)/float(glyphCount),alpha);
         originalShadow(font,glyph,x+advance,copyrightY-11.f,tint,flag);
-        prefix+=glyph;
+        // Font chooses its width table from the entire measured string. A
+        // mixed ASCII/Chinese prefix changes tables halfway through the label,
+        // whereas each draw above contains one glyph. Measure that same glyph.
+        advance+=float(lineLength(font,glyph,1.f,false));
+        ++glyphIndex;
         offset=next;
     }
 }
@@ -62,9 +71,26 @@ const engine::Hook hooks[]={
 void InstallVerified(void* lib) {
     static_assert(sizeof(void*)==4 && sizeof(std::string)==4,"Verified ARMv7 GNU STL ABI");
     lineLength=reinterpret_cast<decltype(lineLength)>(dlsym(lib,"_ZNK4Font13getLineLengthERKSsfb"));
+    getFont=reinterpret_cast<decltype(getFont)>(dlsym(lib,"_ZNK15MinecraftClient7getFontEv"));
+    getGuiData=reinterpret_cast<decltype(getGuiData)>(dlsym(lib,"_ZN15MinecraftClient10getGuiDataEv"));
+    screenWidth=reinterpret_cast<decltype(screenWidth)>(dlsym(lib,"_ZNK7GuiData14getScreenWidthEv"));
     if(!lineLength) return;
-    if(engine::InstallHooks(lib,hooks,sizeof(hooks)/sizeof(hooks[0])))
+    if(engine::InstallHooks(lib,hooks,sizeof(hooks)/sizeof(hooks[0]))) {
+        overlayAvailable=getFont && getGuiData && screenWidth;
         __android_log_print(ANDROID_LOG_INFO,"SunchBranding","Title branding installed: version %s",informationcontent::version);
+    }
+}
+void RenderDevelopmentOverlay(void* client) {
+    if(!informationcontent::DEVELOPMENT_BUILD || !overlayAvailable || !client) return;
+    static const std::string text=informationcontent::DEVELOPMENT_BUILD_TEXT;
+    if(text.empty()) return;
+    void* font=getFont(client);
+    void* gui=getGuiData(client);
+    if(!font || !gui) return;
+    const int width=screenWidth(gui);
+    if(width<=0) return;
+    const float x=(float(width)-float(lineLength(font,text,1.f,false)))*.5f;
+    originalShadow(font,text,x,4.f,Color{1.f,.8f,.3f,1.f},false);
 }
 }
 } // namespace features
