@@ -3,7 +3,7 @@ plugins {
 }
 
 android {
-    namespace = "com.start.clienttest"
+    namespace = "com.mojang.minecraftpe"
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -11,17 +11,11 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.start.clienttest"
+        applicationId = "com.mojang.minecraftpe"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
-        externalNativeBuild {
-            ndkBuild {
-                abiFilters.addAll(listOf("armeabi-v7a"))
-                arguments.add("APP_STL:=gnustl_shared")
-            }
-        }
+        versionCode = 760140301
+        versionName = "0.14.3"
         ndk {
             abiFilters.addAll(listOf("armeabi-v7a"))
         }
@@ -51,6 +45,7 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
+            excludes += "**/libmcpe_stub.so"
         }
     }
 }

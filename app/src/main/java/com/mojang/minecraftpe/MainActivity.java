@@ -39,7 +39,6 @@ import android.widget.TextView;
 import com.mojang.android.StringValue;
 import com.mojang.minecraftpe.input.InputDeviceManager;
 import com.mojang.minecraftpe.platforms.Platform;
-import com.start.clienttest.Main;
 
 import org.fmod.FMOD;
 import org.json.JSONException;
@@ -133,11 +132,6 @@ public class MainActivity extends NativeActivity implements View.OnKeyListener {
 
     static {
         System.loadLibrary("gnustl_shared");
-        try {
-            System.loadLibrary("Mod");
-        } catch (UnsatisfiedLinkError e) {
-            Log.d("Start", "Lib not found!!");
-        }
         System.loadLibrary("fmod");
         System.loadLibrary("minecraftpe");
     }
@@ -518,7 +512,6 @@ public class MainActivity extends NativeActivity implements View.OnKeyListener {
     @Override // android.app.NativeActivity, android.app.Activity
     public void onCreate(Bundle bundle) {
         super.onCreate(bundle);
-        Main.main(this);
         this.platform = Platform.createPlatform(true);
         setVolumeControlStream(3);
         nativeRegisterThis();
