@@ -1,4 +1,5 @@
 #include "Features.h"
+#include "AutoConnect.h"
 #include "DynamicLight.h"
 #include "ErrorReports.h"
 #include "ForceSprint.h"
@@ -23,6 +24,7 @@ void InstallVerified(void* lib) {
     forcesprint::InstallVerified(lib);
     vsync::Initialize(lib);
     targetinfo::Initialize(lib);
+    autoconnect::Initialize(lib);
     hud::InstallVerified(lib);
     dynamiclight::InstallVerified(lib);
     titlebranding::InstallVerified(lib);

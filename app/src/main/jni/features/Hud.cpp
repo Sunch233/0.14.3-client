@@ -1,4 +1,5 @@
 #include "Hud.h"
+#include "AutoConnect.h"
 #include "FpsCounter.h"
 #include "TargetInfo.h"
 #include "VSync.h"
@@ -26,6 +27,8 @@ void Frame(void* self,float dt) {
     // Runs after all native screens, including menus and loading screens; the
     // development marker therefore remains visible when the HUD is hidden.
     titlebranding::RenderDevelopmentOverlay(engine::At<void*>(self,4));
+    // Waits for the start menu hook before joining the configured server.
+    autoconnect::Tick(engine::At<void*>(self,4));
 }
 void HudRender(void* self,void* client,void* control,int pass) {
     originalHudRender(self,client,control,pass);

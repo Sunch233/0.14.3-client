@@ -1,5 +1,6 @@
 #include "GraphicsSettings.h"
 #include <cstdio>
+#include <cstring>
 #include <mutex>
 #include <android/log.h>
 namespace graphicssettings {
@@ -7,13 +8,19 @@ namespace {
 std::mutex mutex;
 Settings settings;
 std::string filePath;
+std::string Trim(const char* begin,const char* end) {
+    while(begin<end && (*begin==' '||*begin=='\t')) ++begin;
+    while(end>begin && (end[-1]=='\n'||end[-1]=='\r'||end[-1]==' '||end[-1]=='\t')) --end;
+    return std::string(begin,end);
+}
 bool Save() {
     if(filePath.empty()) return false;
     const std::string temp=filePath+".tmp";
     FILE* f=std::fopen(temp.c_str(),"wb");
     if(!f) return false;
-    bool ok=std::fprintf(f,"version=1\nshowFps=%d\nvsync=%d\nblockInfo=%d\ndynamicLight=%d\nforceSprint=%d\nuiDebug=%d\nwin10Ui=%d\n",
-        settings.showFps?1:0,settings.vsync?1:0,settings.blockInfo?1:0,settings.dynamicLight?1:0,settings.forceSprint?1:0,settings.uiDebug?1:0,settings.win10Ui?1:0)>0;
+    bool ok=std::fprintf(f,"version=1\nshowFps=%d\nvsync=%d\nblockInfo=%d\ndynamicLight=%d\nforceSprint=%d\nuiDebug=%d\nwin10Ui=%d\nautoConnect=%s\n",
+        settings.showFps?1:0,settings.vsync?1:0,settings.blockInfo?1:0,settings.dynamicLight?1:0,settings.forceSprint?1:0,settings.uiDebug?1:0,settings.win10Ui?1:0,
+        settings.autoConnect.c_str())>0;
     if(std::fclose(f)!=0) ok=false;
     if(ok) ok=std::rename(temp.c_str(),filePath.c_str())==0;
     if(!ok) std::remove(temp.c_str());
@@ -39,6 +46,7 @@ void Configure(const char* path) {
         else if(std::sscanf(line,"forceSprint=%d %c",&value,&tail)==1 && (value==0 || value==1)) loaded.forceSprint=value!=0;
         else if(std::sscanf(line,"uiDebug=%d %c",&value,&tail)==1 && (value==0 || value==1)) loaded.uiDebug=value!=0;
         else if(std::sscanf(line,"win10Ui=%d %c",&value,&tail)==1 && (value==0 || value==1)) loaded.win10Ui=value!=0;
+        else if(std::strncmp(line,"autoConnect=",12)==0) loaded.autoConnect=Trim(line+12,line+std::strlen(line));
     }
     std::fclose(f);
     if(version==1) settings=loaded;
@@ -89,6 +97,13 @@ void SetWin10Ui(bool enabled) {
     if(settings.win10Ui==enabled) return;
     settings.win10Ui=enabled;
     if(!Save()) __android_log_print(ANDROID_LOG_WARN,"ClientSettings","Could not save Windows 10 UI setting");
+}
+
+void SetAutoConnect(const std::string& target) {
+    std::lock_guard<std::mutex> lock(mutex);
+    if(settings.autoConnect==target) return;
+    settings.autoConnect=target;
+    if(!Save()) __android_log_print(ANDROID_LOG_WARN,"ClientSettings","Could not save auto connect setting");
 }
 
 }

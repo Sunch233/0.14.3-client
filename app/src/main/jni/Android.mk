@@ -49,6 +49,7 @@ LOCAL_SRC_FILES := main.cpp \
     features/ForceSprint.cpp \
     features/Hud.cpp \
     features/FpsCounter.cpp \
+    features/AutoConnect.cpp \
     features/TargetInfo.cpp \
     features/VSync.cpp \
     features/DynamicLight.cpp \
